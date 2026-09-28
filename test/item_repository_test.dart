@@ -131,9 +131,9 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 20));
       final updated = await repository.updateItem(
         created.id,
-        title: 't',
+        title: const FieldUpdate.set('t'),
         content: 'changed',
-        note: 'n',
+        note: const FieldUpdate.set('n'),
         tags: ['x'],
       );
 
@@ -154,11 +154,67 @@ void main() {
         title: 't',
         tags: ['a'],
       );
-      final updated = await repository.updateItem(created.id, note: 'new');
+      final updated = await repository.updateItem(
+        created.id,
+        note: const FieldUpdate.set('new'),
+      );
       expect(updated.title, 't');
       expect(updated.content, 'c');
       expect(updated.note, 'new');
       expect(updated.tags, ['a']);
+    });
+
+    test('title can be updated and explicitly cleared', () async {
+      final created = await repository.createItem(
+        content: 'c',
+        title: 'original',
+      );
+
+      final updated = await repository.updateItem(
+        created.id,
+        title: const FieldUpdate.set('updated'),
+      );
+      expect(updated.title, 'updated');
+
+      final cleared = await repository.updateItem(
+        created.id,
+        title: const FieldUpdate.set(null),
+      );
+      expect(cleared.title, isNull);
+      expect((await repository.getItemById(created.id))!.title, isNull);
+    });
+
+    test('note can be updated and explicitly cleared', () async {
+      final created = await repository.createItem(
+        content: 'c',
+        note: 'original',
+      );
+
+      final updated = await repository.updateItem(
+        created.id,
+        note: const FieldUpdate.set('updated'),
+      );
+      expect(updated.note, 'updated');
+
+      final cleared = await repository.updateItem(
+        created.id,
+        note: const FieldUpdate.set(null),
+      );
+      expect(cleared.note, isNull);
+      expect((await repository.getItemById(created.id))!.note, isNull);
+    });
+
+    test('omitted title and note remain unchanged', () async {
+      final created = await repository.createItem(
+        content: 'c',
+        title: 'title',
+        note: 'note',
+      );
+
+      final updated = await repository.updateItem(created.id, tags: ['tag']);
+
+      expect(updated.title, 'title');
+      expect(updated.note, 'note');
     });
 
     test('update rejects blank content and keeps the stored value', () async {
@@ -262,6 +318,48 @@ void main() {
       final second = await repository.softDeleteItem(created.id);
       expect(second.deletedAt, first.deletedAt);
     });
+
+    test(
+      'update rejects a tombstoned item without changing delete state',
+      () async {
+        final created = await repository.createItem(content: 'c');
+        final deleted = await repository.softDeleteItem(created.id);
+        final deleteMutation = await pendingEntry(created.id);
+
+        await expectLater(
+          repository.updateItem(created.id, content: 'changed'),
+          throwsStateError,
+        );
+
+        final stored = await repository.getItemById(created.id);
+        final pending = await pendingEntry(created.id);
+        expect(stored!.content, 'c');
+        expect(stored.deletedAt, deleted.deletedAt);
+        expect(pending.op, 'delete');
+        expect(pending.mutationId, deleteMutation.mutationId);
+      },
+    );
+
+    test(
+      'setPinned rejects a tombstoned item without changing delete state',
+      () async {
+        final created = await repository.createItem(content: 'c');
+        final deleted = await repository.softDeleteItem(created.id);
+        final deleteMutation = await pendingEntry(created.id);
+
+        await expectLater(
+          repository.setPinned(created.id, true),
+          throwsStateError,
+        );
+
+        final stored = await repository.getItemById(created.id);
+        final pending = await pendingEntry(created.id);
+        expect(stored!.isPinned, isFalse);
+        expect(stored.deletedAt, deleted.deletedAt);
+        expect(pending.op, 'delete');
+        expect(pending.mutationId, deleteMutation.mutationId);
+      },
+    );
   });
 
   group('outbox durability', () {
@@ -301,11 +399,14 @@ void main() {
 
     test('restore produces a pending upsert mutation', () async {
       final item = await repository.createItem(content: 'c');
-      await repository.softDeleteItem(item.id);
       await simulateServerAck(item.id, 1);
+      await repository.softDeleteItem(item.id);
+      expect((await pendingEntry(item.id)).op, 'delete');
+
       await repository.restoreItem(item.id);
       final entry = await pendingEntry(item.id);
       expect(entry.op, 'upsert');
+      expect(entry.baseRevision, 1);
     });
 
     test('pin toggle produces a pending mutation', () async {
@@ -321,7 +422,7 @@ void main() {
       final firstMutationId = (await pendingEntry(item.id)).mutationId;
 
       await repository.updateItem(item.id, content: 'c2');
-      await repository.updateItem(item.id, note: 'n');
+      await repository.updateItem(item.id, note: const FieldUpdate.set('n'));
       await repository.setPinned(item.id, true);
 
       final rows = await (db.select(
@@ -343,7 +444,7 @@ void main() {
       await repository.updateItem(item.id, content: 'c2');
       expect((await pendingEntry(item.id)).baseRevision, 5);
 
-      await repository.updateItem(item.id, note: 'n');
+      await repository.updateItem(item.id, note: const FieldUpdate.set('n'));
       await repository.setPinned(item.id, true);
       expect(
         (await pendingEntry(item.id)).baseRevision,
@@ -433,7 +534,7 @@ void main() {
 
     test('every committed mutation has a pending outbox entry', () async {
       final created = await repository.createItem(content: 'c');
-      await repository.updateItem(created.id, note: 'n');
+      await repository.updateItem(created.id, note: const FieldUpdate.set('n'));
       await repository.setPinned(created.id, true);
       await repository.softDeleteItem(created.id);
       final entry = await pendingEntry(created.id);

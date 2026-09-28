@@ -5,6 +5,42 @@ import '../../../core/database/app_database.dart';
 import '../../../core/database/tags_codec.dart';
 import '../domain/item.dart';
 
+/// Describes whether an optional field should be left alone or assigned a
+/// value (including `null`).
+sealed class FieldUpdate<T> {
+  const FieldUpdate();
+
+  const factory FieldUpdate.unchanged() = _UnchangedFieldUpdate<T>;
+
+  const factory FieldUpdate.set(T value) = _SetFieldUpdate<T>;
+
+  bool get isChanged;
+
+  T valueOr(T current);
+}
+
+final class _UnchangedFieldUpdate<T> extends FieldUpdate<T> {
+  const _UnchangedFieldUpdate();
+
+  @override
+  bool get isChanged => false;
+
+  @override
+  T valueOr(T current) => current;
+}
+
+final class _SetFieldUpdate<T> extends FieldUpdate<T> {
+  const _SetFieldUpdate(this.value);
+
+  final T value;
+
+  @override
+  bool get isChanged => true;
+
+  @override
+  T valueOr(T current) => value;
+}
+
 /// Local persistence boundary for [Item].
 ///
 /// Every mutating operation writes the item row and its pending sync-outbox
@@ -82,14 +118,15 @@ class ItemRepository {
     });
   }
 
-  /// Updates the provided fields. A null field is left unchanged; [content]
-  /// may not be set to a blank value. Returns the updated item, or the item
-  /// unchanged when no field was provided.
+  /// Updates the provided fields. [title] and [note] distinguish an omitted
+  /// update from assigning a value (including `null`) with [FieldUpdate].
+  /// [content] may not be set to a blank value. Returns the updated item, or
+  /// the item unchanged when no field was provided.
   Future<Item> updateItem(
     String id, {
-    String? title,
+    FieldUpdate<String?> title = const FieldUpdate.unchanged(),
     String? content,
-    String? note,
+    FieldUpdate<String?> note = const FieldUpdate.unchanged(),
     List<String>? tags,
   }) => _db.transaction(() async {
     final record = await _recordById(id);
@@ -97,17 +134,25 @@ class ItemRepository {
       throw StateError('No item with id "$id"');
     }
     final current = record.toItem();
-    if (title == null && content == null && note == null && tags == null) {
+    if (current.isDeleted) {
+      throw StateError('Cannot update tombstoned item "$id"');
+    }
+    if (!title.isChanged &&
+        content == null &&
+        !note.isChanged &&
+        tags == null) {
       return current;
     }
+    final updatedTitle = title.valueOr(current.title);
+    final updatedNote = note.valueOr(current.note);
     final now = DateTime.now();
     await (_db.update(_db.items)..where((t) => t.id.equals(id))).write(
       ItemsCompanion(
-        title: Value(title ?? current.title),
+        title: Value(updatedTitle),
         content: Value(
           content == null ? current.content : _validatedContent(content),
         ),
-        note: Value(note ?? current.note),
+        note: Value(updatedNote),
         tags: Value(
           tags == null
               ? TagsCodec.encode(current.tags)
@@ -123,9 +168,9 @@ class ItemRepository {
     );
     return Item(
       id: current.id,
-      title: title ?? current.title,
+      title: updatedTitle,
       content: content ?? current.content,
-      note: note ?? current.note,
+      note: updatedNote,
       tags: tags ?? current.tags,
       isPinned: current.isPinned,
       createdAt: current.createdAt,
@@ -139,6 +184,9 @@ class ItemRepository {
     final record = await _recordById(id);
     if (record == null) {
       throw StateError('No item with id "$id"');
+    }
+    if (record.deletedAt != null) {
+      throw StateError('Cannot pin tombstoned item "$id"');
     }
     if (record.isPinned == isPinned) {
       return record.toItem();
