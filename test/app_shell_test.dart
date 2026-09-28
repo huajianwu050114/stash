@@ -7,7 +7,7 @@ import 'package:stash/app/providers.dart';
 import 'test_database.dart';
 
 void main() {
-  testWidgets('app shell renders against a working in-memory database', (
+  testWidgets('app renders the empty home against an in-memory database', (
     tester,
   ) async {
     final db = createInMemoryDatabase();
@@ -24,8 +24,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
 
     expect(find.text('Stash'), findsOneWidget);
-    expect(find.text('Local foundation ready'), findsOneWidget);
-    expect(find.text('0 active items'), findsOneWidget);
+    expect(find.byKey(const Key('empty-home')), findsOneWidget);
+    expect(find.text('Nothing stashed yet'), findsOneWidget);
+    expect(find.byKey(const Key('new-item-button')), findsOneWidget);
 
     // Unmount the tree inside the test body, fire drift's zero-duration
     // teardown timer with a zero-duration pump, then close the database.

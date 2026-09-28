@@ -20,3 +20,8 @@ final itemRepositoryProvider = Provider<ItemRepository>(
 final activeItemsProvider = StreamProvider<List<Item>>(
   (ref) => ref.watch(itemRepositoryProvider).watchActiveItems(),
 );
+
+/// Reactive view of one item for detail and edit flows.
+final itemByIdProvider = StreamProvider.family<Item?, String>(
+  (ref, id) => ref.watch(itemRepositoryProvider).watchItemById(id),
+);
