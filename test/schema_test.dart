@@ -23,12 +23,21 @@ void main() {
       'title',
       'content',
       'note',
+      'channel_id',
       'tags',
       'is_pinned',
       'created_at',
       'updated_at',
       'deleted_at',
       'server_revision',
+    },
+    'channels': {
+      'id',
+      'name',
+      'parent_id',
+      'created_at',
+      'updated_at',
+      'deleted_at',
     },
     'sync_outbox': {
       'item_id',
@@ -57,26 +66,29 @@ void main() {
     return result;
   }
 
-  test('database is created at schema version 1', () async {
-    expect(db.schemaVersion, 1);
+  test('database is created at schema version 2', () async {
+    expect(db.schemaVersion, 2);
     final version = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(version.data['user_version'], 1);
+    expect(version.data['user_version'], 2);
   });
 
-  test('live schema matches the expected Phase 1 tables and columns', () async {
-    final live = await liveSchema();
-    expect(live.keys.toSet(), expectedTables.keys.toSet());
-    for (final entry in expectedTables.entries) {
-      expect(
-        live[entry.key],
-        entry.value,
-        reason: 'columns of table "${entry.key}"',
-      );
-    }
-  });
+  test(
+    'live schema matches the expected Phase 2.5 tables and columns',
+    () async {
+      final live = await liveSchema();
+      expect(live.keys.toSet(), expectedTables.keys.toSet());
+      for (final entry in expectedTables.entries) {
+        expect(
+          live[entry.key],
+          entry.value,
+          reason: 'columns of table "${entry.key}"',
+        );
+      }
+    },
+  );
 
   test('committed schema export matches the live schema', () async {
-    final exportFile = File('drift_schemas/drift_schema_v1.json');
+    final exportFile = File('drift_schemas/drift_schema_v2.json');
     expect(
       exportFile.existsSync(),
       isTrue,

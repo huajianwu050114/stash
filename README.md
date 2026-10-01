@@ -8,13 +8,15 @@ config snippets, license info, temporary text—anything. It is **not** a
 password manager, secure vault, wiki, or knowledge-base tool, and all content
 shares the same storage and display semantics.
 
-## Status: Phase 2 — Capture and retrieval UX
+## Status: Phase 2.5 — Hierarchical Channels
 
-This phase adds the complete local-only item loop on top of the Phase 1
-persistence foundation:
+Stash is a local-first personal drawer cabinet. Items may stay in the frictionless
+Inbox or live directly inside arbitrarily nested Channels:
 
 - Fast, content-first capture where only content is required
-- Reactive home with separate Pinned and Recent sections
+- Inbox (`channelId == null`), global Pinned, and hierarchical Channel views
+- Root and child Channel creation, rename, safe move, and empty-only soft delete
+- Responsive narrow navigation and a useful two-pane desktop/tablet browser
 - Item detail with copy, edit, pin/unpin, and soft-delete actions
 - Editing that can explicitly clear optional title and note values
 - Simple comma-separated tag entry
@@ -31,13 +33,15 @@ observe Drift-backed Riverpod streams and perform all mutations through
 - File attachments
 - AI features
 - Trash UI
-- Categories, folders, or item types
+- Item types or channel metadata such as colors and icons
 
 ## Architecture
 
 - `lib/features/items/domain/item.dart` — the unified Item model
 - `lib/features/items/data/item_repository.dart` — repository boundary; all
   mutations are transactional (item row + outbox entry)
+- `lib/features/channels/` — hierarchical Channel model, repository, and
+  location picker; hierarchy safety lives below the UI
 - `lib/features/items/presentation/` — home, create/edit, and detail screens
 - `lib/core/database/` — Drift database, tables, migration strategy, and the
   tags JSON codec
@@ -65,9 +69,9 @@ on-device database file.
 
 ## Database migrations
 
-Current schema version: **1**. Phase 2 does not change the schema. The schema
-is exported to `drift_schemas/drift_schema_v1.json`; regenerate it after any
-future schema change:
+Current schema version: **2**. The additive v1→v2 migration creates `channels`
+and adds nullable `items.channel_id`, leaving existing items in Inbox and
+preserving sync tables. Schema snapshots are kept in `drift_schemas/`:
 
 ```sh
 dart run drift_dev schema dump lib/core/database/app_database.dart drift_schemas/

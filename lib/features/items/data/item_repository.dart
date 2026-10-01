@@ -75,6 +75,16 @@ class ItemRepository {
           .watch()
           .map((rows) => rows.map((record) => record.toItem()).toList());
 
+  Stream<List<Item>> watchInboxItems() =>
+      _watchItems((row) => row.channelId.isNull() & row.deletedAt.isNull());
+
+  Stream<List<Item>> watchItemsInChannel(String channelId) => _watchItems(
+    (row) => row.channelId.equals(channelId) & row.deletedAt.isNull(),
+  );
+
+  Stream<List<Item>> watchPinnedItems() =>
+      _watchItems((row) => row.isPinned.equals(true) & row.deletedAt.isNull());
+
   // --- mutations ------------------------------------------------------------
 
   /// Inserts a new item. [id] is generated (UUIDv4) unless supplied, so
@@ -86,19 +96,22 @@ class ItemRepository {
     String? note,
     List<String> tags = const [],
     bool isPinned = false,
+    String? channelId,
   }) async {
-    final now = DateTime.now();
-    final item = Item(
-      id: id ?? _uuid.v4(),
-      title: title,
-      content: _validatedContent(content),
-      note: note,
-      tags: tags,
-      isPinned: isPinned,
-      createdAt: now,
-      updatedAt: now,
-    );
     return _db.transaction(() async {
+      await _validateTargetChannel(channelId);
+      final now = DateTime.now();
+      final item = Item(
+        id: id ?? _uuid.v4(),
+        title: title,
+        content: _validatedContent(content),
+        note: note,
+        channelId: channelId,
+        tags: tags,
+        isPinned: isPinned,
+        createdAt: now,
+        updatedAt: now,
+      );
       await _db
           .into(_db.items)
           .insert(
@@ -107,6 +120,7 @@ class ItemRepository {
               title: Value(item.title),
               content: item.content,
               note: Value(item.note),
+              channelId: Value(item.channelId),
               tags: Value(TagsCodec.encode(item.tags)),
               isPinned: Value(item.isPinned),
               createdAt: item.createdAt,
@@ -117,6 +131,39 @@ class ItemRepository {
       return item;
     });
   }
+
+  /// Moves an active item. A null [channelId] means Inbox.
+  Future<Item> moveItem(String id, {required String? channelId}) =>
+      _db.transaction(() async {
+        final record = await _recordById(id);
+        if (record == null) throw StateError('No item with id "$id"');
+        if (record.deletedAt != null) {
+          throw StateError('Cannot move tombstoned item "$id"');
+        }
+        await _validateTargetChannel(channelId);
+        if (record.channelId == channelId) return record.toItem();
+        final now = DateTime.now();
+        await (_db.update(_db.items)..where((row) => row.id.equals(id))).write(
+          ItemsCompanion(channelId: Value(channelId), updatedAt: Value(now)),
+        );
+        await _enqueueMutation(
+          id,
+          op: 'upsert',
+          baseRevisionFallback: record.serverRevision,
+        );
+        return Item(
+          id: record.id,
+          title: record.title,
+          content: record.content,
+          note: record.note,
+          channelId: channelId,
+          tags: TagsCodec.decode(record.tags),
+          isPinned: record.isPinned,
+          createdAt: record.createdAt,
+          updatedAt: now,
+          deletedAt: record.deletedAt,
+        );
+      });
 
   /// Updates the provided fields. [title] and [note] distinguish an omitted
   /// update from assigning a value (including `null`) with [FieldUpdate].
@@ -171,6 +218,7 @@ class ItemRepository {
       title: updatedTitle,
       content: content ?? current.content,
       note: updatedNote,
+      channelId: current.channelId,
       tags: tags ?? current.tags,
       isPinned: current.isPinned,
       createdAt: current.createdAt,
@@ -205,6 +253,7 @@ class ItemRepository {
       title: record.title,
       content: record.content,
       note: record.note,
+      channelId: record.channelId,
       tags: TagsCodec.decode(record.tags),
       isPinned: isPinned,
       createdAt: record.createdAt,
@@ -237,6 +286,7 @@ class ItemRepository {
       title: record.title,
       content: record.content,
       note: record.note,
+      channelId: record.channelId,
       tags: TagsCodec.decode(record.tags),
       isPinned: record.isPinned,
       createdAt: record.createdAt,
@@ -268,6 +318,7 @@ class ItemRepository {
       title: record.title,
       content: record.content,
       note: record.note,
+      channelId: record.channelId,
       tags: TagsCodec.decode(record.tags),
       isPinned: record.isPinned,
       createdAt: record.createdAt,
@@ -326,6 +377,25 @@ class ItemRepository {
   Future<ItemRecord?> _recordById(String id) =>
       (_db.select(_db.items)..where((t) => t.id.equals(id))).getSingleOrNull();
 
+  Stream<List<Item>> _watchItems(
+    Expression<bool> Function($ItemsTable row) predicate,
+  ) =>
+      (_db.select(_db.items)
+            ..where(predicate)
+            ..orderBy([(row) => OrderingTerm.desc(row.updatedAt)]))
+          .watch()
+          .map((rows) => rows.map((row) => row.toItem()).toList());
+
+  Future<void> _validateTargetChannel(String? channelId) async {
+    if (channelId == null) return;
+    final channel = await (_db.select(
+      _db.channels,
+    )..where((row) => row.id.equals(channelId))).getSingleOrNull();
+    if (channel == null || channel.deletedAt != null) {
+      throw StateError('Target channel does not exist or was deleted.');
+    }
+  }
+
   static String _validatedContent(String content) {
     if (content.trim().isEmpty) {
       throw ArgumentError.value(content, 'content', 'must not be blank');
@@ -340,6 +410,7 @@ extension on ItemRecord {
     title: title,
     content: content,
     note: note,
+    channelId: channelId,
     tags: TagsCodec.decode(tags),
     isPinned: isPinned,
     createdAt: createdAt,

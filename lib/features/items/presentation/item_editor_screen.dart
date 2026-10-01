@@ -7,11 +7,13 @@ import '../data/item_repository.dart';
 import '../domain/item.dart';
 
 class ItemEditorScreen extends ConsumerStatefulWidget {
-  const ItemEditorScreen.create({super.key}) : item = null;
+  const ItemEditorScreen.create({super.key, this.channelId}) : item = null;
 
-  const ItemEditorScreen.edit({super.key, required this.item});
+  const ItemEditorScreen.edit({super.key, required this.item})
+    : channelId = null;
 
   final Item? item;
+  final String? channelId;
 
   bool get isEditing => item != null;
 
@@ -63,6 +65,7 @@ class _ItemEditorScreenState extends ConsumerState<ItemEditorScreen> {
           title: title,
           note: note,
           tags: tags,
+          channelId: widget.channelId,
         );
       } else {
         await repository.updateItem(

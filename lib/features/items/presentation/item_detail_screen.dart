@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/providers.dart';
+import '../../channels/presentation/location_picker.dart';
 import '../domain/item.dart';
 import 'item_editor_screen.dart';
 
@@ -82,9 +83,31 @@ class _ItemDetail extends ConsumerWidget {
     }
   }
 
+  Future<void> _move(BuildContext context, WidgetRef ref) async {
+    final selection = await showLocationPicker(
+      context,
+      ref: ref,
+      currentChannelId: item.channelId,
+    );
+    if (selection == null || !context.mounted) return;
+    try {
+      await ref
+          .read(itemRepositoryProvider)
+          .moveItem(item.id, channelId: selection.channelId);
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not move this item.')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final title = item.title?.trim();
+    final channel = item.channelId == null
+        ? null
+        : ref.watch(channelByIdProvider(item.channelId!));
     return Scaffold(
       appBar: AppBar(title: const Text('Item')),
       body: SafeArea(
@@ -139,6 +162,12 @@ class _ItemDetail extends ConsumerWidget {
                     ],
                   ),
                 ],
+                const SizedBox(height: 24),
+                Text(
+                  'Location: ${item.channelId == null ? 'Inbox' : channel?.value?.name ?? 'Channel'}',
+                  key: const Key('item-location'),
+                  style: _metadataStyle(context),
+                ),
                 const SizedBox(height: 36),
                 Wrap(
                   spacing: 8,
@@ -159,6 +188,12 @@ class _ItemDetail extends ConsumerWidget {
                       ),
                       icon: const Icon(Icons.edit_outlined, size: 18),
                       label: const Text('Edit'),
+                    ),
+                    TextButton.icon(
+                      key: const Key('move-item-button'),
+                      onPressed: () => _move(context, ref),
+                      icon: const Icon(Icons.drive_file_move_outline, size: 18),
+                      label: const Text('Move'),
                     ),
                     TextButton.icon(
                       key: const Key('pin-item-button'),

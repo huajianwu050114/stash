@@ -46,6 +46,17 @@ class $ItemsTable extends Items with TableInfo<$ItemsTable, ItemRecord> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _channelIdMeta = const VerificationMeta(
+    'channelId',
+  );
+  @override
+  late final GeneratedColumn<String> channelId = GeneratedColumn<String>(
+    'channel_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _tagsMeta = const VerificationMeta('tags');
   @override
   late final GeneratedColumn<String> tags = GeneratedColumn<String>(
@@ -122,6 +133,7 @@ class $ItemsTable extends Items with TableInfo<$ItemsTable, ItemRecord> {
     title,
     content,
     note,
+    channelId,
     tags,
     isPinned,
     createdAt,
@@ -164,6 +176,12 @@ class $ItemsTable extends Items with TableInfo<$ItemsTable, ItemRecord> {
       context.handle(
         _noteMeta,
         note.isAcceptableOrUnknown(data['note']!, _noteMeta),
+      );
+    }
+    if (data.containsKey('channel_id')) {
+      context.handle(
+        _channelIdMeta,
+        channelId.isAcceptableOrUnknown(data['channel_id']!, _channelIdMeta),
       );
     }
     if (data.containsKey('tags')) {
@@ -234,6 +252,10 @@ class $ItemsTable extends Items with TableInfo<$ItemsTable, ItemRecord> {
         DriftSqlType.string,
         data['${effectivePrefix}note'],
       ),
+      channelId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}channel_id'],
+      ),
       tags: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}tags'],
@@ -273,6 +295,9 @@ class ItemRecord extends DataClass implements Insertable<ItemRecord> {
   final String content;
   final String? note;
 
+  /// Null means the item lives in Inbox.
+  final String? channelId;
+
   /// JSON array of strings, encoded by `TagsCodec`. Kept serialized for
   /// Phase 1; the codec is the single seam for a future relational schema.
   final String tags;
@@ -289,6 +314,7 @@ class ItemRecord extends DataClass implements Insertable<ItemRecord> {
     this.title,
     required this.content,
     this.note,
+    this.channelId,
     required this.tags,
     required this.isPinned,
     required this.createdAt,
@@ -306,6 +332,9 @@ class ItemRecord extends DataClass implements Insertable<ItemRecord> {
     map['content'] = Variable<String>(content);
     if (!nullToAbsent || note != null) {
       map['note'] = Variable<String>(note);
+    }
+    if (!nullToAbsent || channelId != null) {
+      map['channel_id'] = Variable<String>(channelId);
     }
     map['tags'] = Variable<String>(tags);
     map['is_pinned'] = Variable<bool>(isPinned);
@@ -326,6 +355,9 @@ class ItemRecord extends DataClass implements Insertable<ItemRecord> {
           : Value(title),
       content: Value(content),
       note: note == null && nullToAbsent ? const Value.absent() : Value(note),
+      channelId: channelId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(channelId),
       tags: Value(tags),
       isPinned: Value(isPinned),
       createdAt: Value(createdAt),
@@ -347,6 +379,7 @@ class ItemRecord extends DataClass implements Insertable<ItemRecord> {
       title: serializer.fromJson<String?>(json['title']),
       content: serializer.fromJson<String>(json['content']),
       note: serializer.fromJson<String?>(json['note']),
+      channelId: serializer.fromJson<String?>(json['channelId']),
       tags: serializer.fromJson<String>(json['tags']),
       isPinned: serializer.fromJson<bool>(json['isPinned']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
@@ -363,6 +396,7 @@ class ItemRecord extends DataClass implements Insertable<ItemRecord> {
       'title': serializer.toJson<String?>(title),
       'content': serializer.toJson<String>(content),
       'note': serializer.toJson<String?>(note),
+      'channelId': serializer.toJson<String?>(channelId),
       'tags': serializer.toJson<String>(tags),
       'isPinned': serializer.toJson<bool>(isPinned),
       'createdAt': serializer.toJson<DateTime>(createdAt),
@@ -377,6 +411,7 @@ class ItemRecord extends DataClass implements Insertable<ItemRecord> {
     Value<String?> title = const Value.absent(),
     String? content,
     Value<String?> note = const Value.absent(),
+    Value<String?> channelId = const Value.absent(),
     String? tags,
     bool? isPinned,
     DateTime? createdAt,
@@ -388,6 +423,7 @@ class ItemRecord extends DataClass implements Insertable<ItemRecord> {
     title: title.present ? title.value : this.title,
     content: content ?? this.content,
     note: note.present ? note.value : this.note,
+    channelId: channelId.present ? channelId.value : this.channelId,
     tags: tags ?? this.tags,
     isPinned: isPinned ?? this.isPinned,
     createdAt: createdAt ?? this.createdAt,
@@ -401,6 +437,7 @@ class ItemRecord extends DataClass implements Insertable<ItemRecord> {
       title: data.title.present ? data.title.value : this.title,
       content: data.content.present ? data.content.value : this.content,
       note: data.note.present ? data.note.value : this.note,
+      channelId: data.channelId.present ? data.channelId.value : this.channelId,
       tags: data.tags.present ? data.tags.value : this.tags,
       isPinned: data.isPinned.present ? data.isPinned.value : this.isPinned,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
@@ -419,6 +456,7 @@ class ItemRecord extends DataClass implements Insertable<ItemRecord> {
           ..write('title: $title, ')
           ..write('content: $content, ')
           ..write('note: $note, ')
+          ..write('channelId: $channelId, ')
           ..write('tags: $tags, ')
           ..write('isPinned: $isPinned, ')
           ..write('createdAt: $createdAt, ')
@@ -435,6 +473,7 @@ class ItemRecord extends DataClass implements Insertable<ItemRecord> {
     title,
     content,
     note,
+    channelId,
     tags,
     isPinned,
     createdAt,
@@ -450,6 +489,7 @@ class ItemRecord extends DataClass implements Insertable<ItemRecord> {
           other.title == this.title &&
           other.content == this.content &&
           other.note == this.note &&
+          other.channelId == this.channelId &&
           other.tags == this.tags &&
           other.isPinned == this.isPinned &&
           other.createdAt == this.createdAt &&
@@ -463,6 +503,7 @@ class ItemsCompanion extends UpdateCompanion<ItemRecord> {
   final Value<String?> title;
   final Value<String> content;
   final Value<String?> note;
+  final Value<String?> channelId;
   final Value<String> tags;
   final Value<bool> isPinned;
   final Value<DateTime> createdAt;
@@ -475,6 +516,7 @@ class ItemsCompanion extends UpdateCompanion<ItemRecord> {
     this.title = const Value.absent(),
     this.content = const Value.absent(),
     this.note = const Value.absent(),
+    this.channelId = const Value.absent(),
     this.tags = const Value.absent(),
     this.isPinned = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -488,6 +530,7 @@ class ItemsCompanion extends UpdateCompanion<ItemRecord> {
     this.title = const Value.absent(),
     required String content,
     this.note = const Value.absent(),
+    this.channelId = const Value.absent(),
     this.tags = const Value.absent(),
     this.isPinned = const Value.absent(),
     required DateTime createdAt,
@@ -504,6 +547,7 @@ class ItemsCompanion extends UpdateCompanion<ItemRecord> {
     Expression<String>? title,
     Expression<String>? content,
     Expression<String>? note,
+    Expression<String>? channelId,
     Expression<String>? tags,
     Expression<bool>? isPinned,
     Expression<DateTime>? createdAt,
@@ -517,6 +561,7 @@ class ItemsCompanion extends UpdateCompanion<ItemRecord> {
       if (title != null) 'title': title,
       if (content != null) 'content': content,
       if (note != null) 'note': note,
+      if (channelId != null) 'channel_id': channelId,
       if (tags != null) 'tags': tags,
       if (isPinned != null) 'is_pinned': isPinned,
       if (createdAt != null) 'created_at': createdAt,
@@ -532,6 +577,7 @@ class ItemsCompanion extends UpdateCompanion<ItemRecord> {
     Value<String?>? title,
     Value<String>? content,
     Value<String?>? note,
+    Value<String?>? channelId,
     Value<String>? tags,
     Value<bool>? isPinned,
     Value<DateTime>? createdAt,
@@ -545,6 +591,7 @@ class ItemsCompanion extends UpdateCompanion<ItemRecord> {
       title: title ?? this.title,
       content: content ?? this.content,
       note: note ?? this.note,
+      channelId: channelId ?? this.channelId,
       tags: tags ?? this.tags,
       isPinned: isPinned ?? this.isPinned,
       createdAt: createdAt ?? this.createdAt,
@@ -569,6 +616,9 @@ class ItemsCompanion extends UpdateCompanion<ItemRecord> {
     }
     if (note.present) {
       map['note'] = Variable<String>(note.value);
+    }
+    if (channelId.present) {
+      map['channel_id'] = Variable<String>(channelId.value);
     }
     if (tags.present) {
       map['tags'] = Variable<String>(tags.value);
@@ -601,12 +651,426 @@ class ItemsCompanion extends UpdateCompanion<ItemRecord> {
           ..write('title: $title, ')
           ..write('content: $content, ')
           ..write('note: $note, ')
+          ..write('channelId: $channelId, ')
           ..write('tags: $tags, ')
           ..write('isPinned: $isPinned, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt, ')
           ..write('serverRevision: $serverRevision, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $ChannelsTable extends Channels
+    with TableInfo<$ChannelsTable, ChannelRecord> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ChannelsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _parentIdMeta = const VerificationMeta(
+    'parentId',
+  );
+  @override
+  late final GeneratedColumn<String> parentId = GeneratedColumn<String>(
+    'parent_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES channels (id)',
+    ),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    name,
+    parentId,
+    createdAt,
+    updatedAt,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'channels';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ChannelRecord> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('parent_id')) {
+      context.handle(
+        _parentIdMeta,
+        parentId.isAcceptableOrUnknown(data['parent_id']!, _parentIdMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  ChannelRecord map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ChannelRecord(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      parentId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}parent_id'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $ChannelsTable createAlias(String alias) {
+    return $ChannelsTable(attachedDatabase, alias);
+  }
+}
+
+class ChannelRecord extends DataClass implements Insertable<ChannelRecord> {
+  final String id;
+  final String name;
+  final String? parentId;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final DateTime? deletedAt;
+  const ChannelRecord({
+    required this.id,
+    required this.name,
+    this.parentId,
+    required this.createdAt,
+    required this.updatedAt,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['name'] = Variable<String>(name);
+    if (!nullToAbsent || parentId != null) {
+      map['parent_id'] = Variable<String>(parentId);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  ChannelsCompanion toCompanion(bool nullToAbsent) {
+    return ChannelsCompanion(
+      id: Value(id),
+      name: Value(name),
+      parentId: parentId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(parentId),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory ChannelRecord.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ChannelRecord(
+      id: serializer.fromJson<String>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      parentId: serializer.fromJson<String?>(json['parentId']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'name': serializer.toJson<String>(name),
+      'parentId': serializer.toJson<String?>(parentId),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  ChannelRecord copyWith({
+    String? id,
+    String? name,
+    Value<String?> parentId = const Value.absent(),
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => ChannelRecord(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    parentId: parentId.present ? parentId.value : this.parentId,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  ChannelRecord copyWithCompanion(ChannelsCompanion data) {
+    return ChannelRecord(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      parentId: data.parentId.present ? data.parentId.value : this.parentId,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ChannelRecord(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('parentId: $parentId, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, name, parentId, createdAt, updatedAt, deletedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ChannelRecord &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.parentId == this.parentId &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.deletedAt == this.deletedAt);
+}
+
+class ChannelsCompanion extends UpdateCompanion<ChannelRecord> {
+  final Value<String> id;
+  final Value<String> name;
+  final Value<String?> parentId;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const ChannelsCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.parentId = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ChannelsCompanion.insert({
+    required String id,
+    required String name,
+    this.parentId = const Value.absent(),
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       name = Value(name),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<ChannelRecord> custom({
+    Expression<String>? id,
+    Expression<String>? name,
+    Expression<String>? parentId,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (parentId != null) 'parent_id': parentId,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ChannelsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? name,
+    Value<String?>? parentId,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return ChannelsCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      parentId: parentId ?? this.parentId,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (parentId.present) {
+      map['parent_id'] = Variable<String>(parentId.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ChannelsCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('parentId: $parentId, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('deletedAt: $deletedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -1244,6 +1708,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
   late final $ItemsTable items = $ItemsTable(this);
+  late final $ChannelsTable channels = $ChannelsTable(this);
   late final $SyncOutboxTable syncOutbox = $SyncOutboxTable(this);
   late final $SyncMetaTable syncMeta = $SyncMetaTable(this);
   @override
@@ -1252,6 +1717,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   @override
   List<DatabaseSchemaEntity> get allSchemaEntities => [
     items,
+    channels,
     syncOutbox,
     syncMeta,
   ];
@@ -1265,6 +1731,7 @@ typedef $$ItemsTableCreateCompanionBuilder = ItemsCompanion Function({
   Value<String?> title,
   required String content,
   Value<String?> note,
+  Value<String?> channelId,
   Value<String> tags,
   Value<bool> isPinned,
   required DateTime createdAt,
@@ -1278,6 +1745,7 @@ typedef $$ItemsTableUpdateCompanionBuilder = ItemsCompanion Function({
   Value<String?> title,
   Value<String> content,
   Value<String?> note,
+  Value<String?> channelId,
   Value<String> tags,
   Value<bool> isPinned,
   Value<DateTime> createdAt,
@@ -1312,6 +1780,11 @@ class $$ItemsTableFilterComposer extends Composer<_$AppDatabase, $ItemsTable> {
 
   ColumnFilters<String> get note => $composableBuilder(
     column: $table.note,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get channelId => $composableBuilder(
+    column: $table.channelId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -1375,6 +1848,11 @@ class $$ItemsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get channelId => $composableBuilder(
+    column: $table.channelId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get tags => $composableBuilder(
     column: $table.tags,
     builder: (column) => ColumnOrderings(column),
@@ -1426,6 +1904,9 @@ class $$ItemsTableAnnotationComposer
 
   GeneratedColumn<String> get note =>
       $composableBuilder(column: $table.note, builder: (column) => column);
+
+  GeneratedColumn<String> get channelId =>
+      $composableBuilder(column: $table.channelId, builder: (column) => column);
 
   GeneratedColumn<String> get tags =>
       $composableBuilder(column: $table.tags, builder: (column) => column);
@@ -1480,6 +1961,7 @@ class $$ItemsTableTableManager
                 Value<String?> title = const Value.absent(),
                 Value<String> content = const Value.absent(),
                 Value<String?> note = const Value.absent(),
+                Value<String?> channelId = const Value.absent(),
                 Value<String> tags = const Value.absent(),
                 Value<bool> isPinned = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -1492,6 +1974,7 @@ class $$ItemsTableTableManager
                 title: title,
                 content: content,
                 note: note,
+                channelId: channelId,
                 tags: tags,
                 isPinned: isPinned,
                 createdAt: createdAt,
@@ -1506,6 +1989,7 @@ class $$ItemsTableTableManager
                 Value<String?> title = const Value.absent(),
                 required String content,
                 Value<String?> note = const Value.absent(),
+                Value<String?> channelId = const Value.absent(),
                 Value<String> tags = const Value.absent(),
                 Value<bool> isPinned = const Value.absent(),
                 required DateTime createdAt,
@@ -1518,6 +2002,7 @@ class $$ItemsTableTableManager
                 title: title,
                 content: content,
                 note: note,
+                channelId: channelId,
                 tags: tags,
                 isPinned: isPinned,
                 createdAt: createdAt,
@@ -1556,6 +2041,338 @@ typedef $$ItemsTableProcessedTableManager =
       (ItemRecord, BaseReferences<_$AppDatabase, $ItemsTable, ItemRecord>),
       ItemRecord,
       PrefetchHooks Function()
+    >;
+typedef $$ChannelsTableCreateCompanionBuilder = ChannelsCompanion Function({
+  required String id,
+  required String name,
+  Value<String?> parentId,
+  required DateTime createdAt,
+  required DateTime updatedAt,
+  Value<DateTime?> deletedAt,
+  Value<int> rowid,
+});
+typedef $$ChannelsTableUpdateCompanionBuilder = ChannelsCompanion Function({
+  Value<String> id,
+  Value<String> name,
+  Value<String?> parentId,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<DateTime?> deletedAt,
+  Value<int> rowid,
+});
+
+final class $$ChannelsTableReferences
+    extends BaseReferences<_$AppDatabase, $ChannelsTable, ChannelRecord> {
+  $$ChannelsTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $ChannelsTable _parentIdTable(_$AppDatabase db) =>
+      db.channels.createAlias('channels__parent_id__channels__id');
+
+  $$ChannelsTableProcessedTableManager? get parentId {
+    final $_column = $_itemColumn<String>('parent_id');
+    if ($_column == null) return null;
+    final manager = $$ChannelsTableTableManager(
+      $_db,
+      $_db.channels,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_parentIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$ChannelsTableFilterComposer
+    extends Composer<_$AppDatabase, $ChannelsTable> {
+  $$ChannelsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$ChannelsTableFilterComposer get parentId {
+    final $$ChannelsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.parentId,
+      referencedTable: $db.channels,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ChannelsTableFilterComposer(
+            $db: $db,
+            $table: $db.channels,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$ChannelsTableOrderingComposer
+    extends Composer<_$AppDatabase, $ChannelsTable> {
+  $$ChannelsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$ChannelsTableOrderingComposer get parentId {
+    final $$ChannelsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.parentId,
+      referencedTable: $db.channels,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ChannelsTableOrderingComposer(
+            $db: $db,
+            $table: $db.channels,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$ChannelsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ChannelsTable> {
+  $$ChannelsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+
+  $$ChannelsTableAnnotationComposer get parentId {
+    final $$ChannelsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.parentId,
+      referencedTable: $db.channels,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ChannelsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.channels,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$ChannelsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $ChannelsTable,
+          ChannelRecord,
+          $$ChannelsTableFilterComposer,
+          $$ChannelsTableOrderingComposer,
+          $$ChannelsTableAnnotationComposer,
+          $$ChannelsTableCreateCompanionBuilder,
+          $$ChannelsTableUpdateCompanionBuilder,
+          (ChannelRecord, $$ChannelsTableReferences),
+          ChannelRecord,
+          PrefetchHooks Function({bool parentId})
+        > {
+  $$ChannelsTableTableManager(_$AppDatabase db, $ChannelsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ChannelsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ChannelsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ChannelsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String?> parentId = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ChannelsCompanion(
+                id: id,
+                name: name,
+                parentId: parentId,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String name,
+                Value<String?> parentId = const Value.absent(),
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ChannelsCompanion.insert(
+                id: id,
+                name: name,
+                parentId: parentId,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$ChannelsTable, ChannelRecord>(table),
+                  $$ChannelsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({parentId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (parentId) {
+                      state = state.withJoin(
+                        currentTable: table,
+                        currentColumn: table.parentId,
+                        referencedTable: $$ChannelsTableReferences
+                            ._parentIdTable(db),
+                        referencedColumn: $$ChannelsTableReferences
+                            ._parentIdTable(db)
+                            .id,
+                      ) as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$ChannelsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $ChannelsTable,
+      ChannelRecord,
+      $$ChannelsTableFilterComposer,
+      $$ChannelsTableOrderingComposer,
+      $$ChannelsTableAnnotationComposer,
+      $$ChannelsTableCreateCompanionBuilder,
+      $$ChannelsTableUpdateCompanionBuilder,
+      (ChannelRecord, $$ChannelsTableReferences),
+      ChannelRecord,
+      PrefetchHooks Function({bool parentId})
     >;
 typedef $$SyncOutboxTableCreateCompanionBuilder = SyncOutboxCompanion Function({
   required String itemId,
@@ -1935,6 +2752,8 @@ class $AppDatabaseManager {
   $AppDatabaseManager(this._db);
   $$ItemsTableTableManager get items =>
       $$ItemsTableTableManager(_db, _db.items);
+  $$ChannelsTableTableManager get channels =>
+      $$ChannelsTableTableManager(_db, _db.channels);
   $$SyncOutboxTableTableManager get syncOutbox =>
       $$SyncOutboxTableTableManager(_db, _db.syncOutbox);
   $$SyncMetaTableTableManager get syncMeta =>

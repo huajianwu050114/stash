@@ -12,6 +12,7 @@ class Item {
     required this.content,
     this.title,
     this.note,
+    this.channelId,
     List<String> tags = const [],
     this.isPinned = false,
     required this.createdAt,
@@ -30,6 +31,9 @@ class Item {
 
   /// Optional extra context kept separate from [content].
   final String? note;
+
+  /// Null means this item belongs to Inbox.
+  final String? channelId;
 
   /// Free-form tags, kept in the order they were provided.
   final List<String> tags;
@@ -54,6 +58,7 @@ class Item {
       other.title == title &&
       other.content == content &&
       other.note == note &&
+      other.channelId == channelId &&
       listEquals(other.tags, tags) &&
       other.isPinned == isPinned &&
       other.createdAt == createdAt &&
@@ -66,6 +71,7 @@ class Item {
     title,
     content,
     note,
+    channelId,
     Object.hashAll(tags),
     isPinned,
     createdAt,

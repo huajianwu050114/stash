@@ -15,6 +15,9 @@ class Items extends Table {
 
   TextColumn get note => text().nullable()();
 
+  /// Null means the item lives in Inbox.
+  TextColumn get channelId => text().nullable()();
+
   /// JSON array of strings, encoded by `TagsCodec`. Kept serialized for
   /// Phase 1; the codec is the single seam for a future relational schema.
   TextColumn get tags => text().withDefault(const Constant('[]'))();
