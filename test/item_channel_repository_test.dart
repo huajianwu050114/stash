@@ -96,4 +96,67 @@ void main() {
     expect(pinned.channelId, channel.id);
     expect((await items.watchPinnedItems().first).single.channelId, channel.id);
   });
+
+  group('restore location', () {
+    test('restoring an Inbox tombstone remains in Inbox', () async {
+      final item = await items.createItem(id: 'inbox', content: 'Inbox');
+      await items.softDeleteItem(item.id);
+
+      final restored = await items.restoreItem(item.id);
+
+      expect(restored.deletedAt, isNull);
+      expect(restored.channelId, isNull);
+      expect((await items.watchInboxItems().first).single.id, item.id);
+    });
+
+    test('restoring into an active channel preserves channelId', () async {
+      final channel = await channels.createRootChannel(
+        id: 'active',
+        name: 'Active',
+      );
+      final item = await items.createItem(
+        id: 'filed',
+        content: 'Filed',
+        channelId: channel.id,
+      );
+      await items.softDeleteItem(item.id);
+
+      final restored = await items.restoreItem(item.id);
+
+      expect(restored.deletedAt, isNull);
+      expect(restored.channelId, channel.id);
+      expect(
+        (await items.watchItemsInChannel(channel.id).first).single.id,
+        item.id,
+      );
+    });
+
+    test(
+      'restoring after its channel is deleted moves the item to Inbox',
+      () async {
+        final channel = await channels.createRootChannel(
+          id: 'deleted',
+          name: 'Deleted',
+        );
+        final item = await items.createItem(
+          id: 'stranded',
+          content: 'Reachable again',
+          channelId: channel.id,
+        );
+        await items.softDeleteItem(item.id);
+        await channels.softDeleteChannel(channel.id);
+
+        final restored = await items.restoreItem(item.id);
+
+        expect(restored.deletedAt, isNull);
+        expect(restored.channelId, isNull);
+        expect((await items.watchInboxItems().first).single.id, item.id);
+        expect(await items.watchItemsInChannel(channel.id).first, isEmpty);
+        final pending = await (db.select(
+          db.syncOutbox,
+        )..where((row) => row.itemId.equals(item.id))).getSingle();
+        expect(pending.op, 'upsert');
+      },
+    );
+  });
 }

@@ -304,9 +304,14 @@ class ItemRepository {
     if (record.deletedAt == null) {
       return record.toItem();
     }
+    final restoredChannelId = await _activeChannelIdOrInbox(record.channelId);
     final now = DateTime.now();
     await (_db.update(_db.items)..where((t) => t.id.equals(id))).write(
-      ItemsCompanion(deletedAt: const Value(null), updatedAt: Value(now)),
+      ItemsCompanion(
+        channelId: Value(restoredChannelId),
+        deletedAt: const Value(null),
+        updatedAt: Value(now),
+      ),
     );
     await _enqueueMutation(
       id,
@@ -318,7 +323,7 @@ class ItemRepository {
       title: record.title,
       content: record.content,
       note: record.note,
-      channelId: record.channelId,
+      channelId: restoredChannelId,
       tags: TagsCodec.decode(record.tags),
       isPinned: record.isPinned,
       createdAt: record.createdAt,
@@ -394,6 +399,14 @@ class ItemRepository {
     if (channel == null || channel.deletedAt != null) {
       throw StateError('Target channel does not exist or was deleted.');
     }
+  }
+
+  Future<String?> _activeChannelIdOrInbox(String? channelId) async {
+    if (channelId == null) return null;
+    final channel = await (_db.select(
+      _db.channels,
+    )..where((row) => row.id.equals(channelId))).getSingleOrNull();
+    return channel == null || channel.deletedAt != null ? null : channelId;
   }
 
   static String _validatedContent(String content) {
