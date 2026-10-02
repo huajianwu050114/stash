@@ -18,6 +18,9 @@ class Items extends Table {
   /// Null means the item lives in Inbox.
   TextColumn get channelId => text().nullable()();
 
+  /// Versioned structured document JSON. Null identifies a legacy text item.
+  TextColumn get documentJson => text().nullable()();
+
   /// JSON array of strings, encoded by `TagsCodec`. Kept serialized for
   /// Phase 1; the codec is the single seam for a future relational schema.
   TextColumn get tags => text().withDefault(const Constant('[]'))();

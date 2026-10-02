@@ -13,6 +13,7 @@ class Item {
     this.title,
     this.note,
     this.channelId,
+    this.documentJson,
     List<String> tags = const [],
     this.isPinned = false,
     required this.createdAt,
@@ -26,7 +27,8 @@ class Item {
   /// Optional short label.
   final String? title;
 
-  /// The stashed content itself. Never null, never blank.
+  /// Plain-text projection used by previews, copy, and future search.
+  /// May be empty only when [documentJson] contains an embedded image.
   final String content;
 
   /// Optional extra context kept separate from [content].
@@ -34,6 +36,9 @@ class Item {
 
   /// Null means this item belongs to Inbox.
   final String? channelId;
+
+  /// Versioned structured document. Null for legacy plain-text Items.
+  final String? documentJson;
 
   /// Free-form tags, kept in the order they were provided.
   final List<String> tags;
@@ -59,6 +64,7 @@ class Item {
       other.content == content &&
       other.note == note &&
       other.channelId == channelId &&
+      other.documentJson == documentJson &&
       listEquals(other.tags, tags) &&
       other.isPinned == isPinned &&
       other.createdAt == createdAt &&
@@ -72,6 +78,7 @@ class Item {
     content,
     note,
     channelId,
+    documentJson,
     Object.hashAll(tags),
     isPinned,
     createdAt,

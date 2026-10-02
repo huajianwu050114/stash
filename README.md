@@ -2,59 +2,80 @@
 
 Throw it in. Find it later.
 
-Stash is a personal, cross-platform information drawer: one unified place to
-stash URLs, API keys, tokens, commands, IP addresses, ports, Git/SSH notes,
-config snippets, license info, temporary text—anything. It is **not** a
-password manager, secure vault, wiki, or knowledge-base tool, and all content
-shares the same storage and display semantics.
+Stash is a local-first personal document drawer for URLs, commands, network
+details, config snippets, screenshots, and other information worth keeping. It
+is not a password manager, wiki, or cloud service.
 
-## Status: Phase 2.5 — Hierarchical Channels
+## Status: Phase 2.6 — Document Editor, Local Images, and Appearance
 
-Stash is a local-first personal drawer cabinet. Items may stay in the frictionless
-Inbox or live directly inside arbitrarily nested Channels:
+- A calm document editor with an optional title, rich body, compact formatting,
+  inline images, and collapsed Note/Tags details
+- Inbox, global Pinned, and arbitrarily nested Channels from Phase 2.5
+- Structured document persistence with a searchable plain-text projection
+- Local image import from the clipboard or a restrained file-picker fallback
+- Persistent System, Light, and Dark appearance choices
+- Responsive narrow navigation and two-pane desktop/tablet browsing
 
-- Fast, content-first capture where only content is required
-- Inbox (`channelId == null`), global Pinned, and hierarchical Channel views
-- Root and child Channel creation, rename, safe move, and empty-only soft delete
-- Responsive narrow navigation and a useful two-pane desktop/tablet browser
-- Item detail with copy, edit, pin/unpin, and soft-delete actions
-- Editing that can explicitly clear optional title and note values
-- Simple comma-separated tag entry
-- Responsive, restrained Material 3 presentation for mobile and desktop
+Search, cloud sync, authentication, AI, Trash UI, and arbitrary file
+attachments are intentionally out of scope.
 
-The local SQLite database remains the working source of truth. UI screens
-observe Drift-backed Riverpod streams and perform all mutations through
-`ItemRepository`.
+## Document persistence
 
-### Intentionally not included yet
+`items.document_json` stores a versioned envelope whose current shape is:
 
-- Search or full-text search
-- Cloud sync, authentication, or networking
-- File attachments
-- AI features
-- Trash UI
-- Item types or channel metadata such as colors and icons
+```json
+{
+  "version": 1,
+  "format": "quill-delta",
+  "document": []
+}
+```
+
+All serialization is isolated in `ItemDocumentCodec`. `items.content` remains
+the non-null plain-text projection used by previews, copy, and future search.
+The repository writes the serialized document, projection, and outbox mutation
+in one database transaction. Legacy rows with a null structured document are
+turned into an in-memory plain-text document when opened and are only upgraded
+when edited.
+
+An Item is valid when its body contains non-whitespace text or at least one
+image. This means an image-only Item has an empty `content` projection but is
+still valid; a title alone is not sufficient.
+
+## Local attachments
+
+Attachment metadata is stored in SQLite, while bytes live under the app support
+directory using relative managed paths such as
+`attachments/<attachment-id>.png`. Documents reference stable attachment UUIDs,
+not absolute paths or base64 data.
+
+New editors allocate their future Item UUID before saving. Image metadata can
+therefore be staged under that ID without inserting an invalid blank Item.
+Cancel cleans the editor session's staged IDs best-effort, and orphan cleanup
+can remove old attachments whose future Item was never saved. The attachment
+table intentionally has no Item foreign key because staged rows predate their
+owner; existing and tombstoned Items both count as owners so sync tombstones do
+not cause unsafe byte deletion.
 
 ## Architecture
 
-- `lib/features/items/domain/item.dart` — the unified Item model
-- `lib/features/items/data/item_repository.dart` — repository boundary; all
-  mutations are transactional (item row + outbox entry)
-- `lib/features/channels/` — hierarchical Channel model, repository, and
-  location picker; hierarchy safety lives below the UI
-- `lib/features/items/presentation/` — home, create/edit, and detail screens
-- `lib/core/database/` — Drift database, tables, migration strategy, and the
-  tags JSON codec
-- `lib/app/` — application theme and Riverpod providers
+- `lib/features/items/data/` — transactional Item repository and versioned
+  document adapter
+- `lib/features/items/presentation/` — home, editor, and structured detail view
+- `lib/features/attachments/` — attachment model, managed storage, clipboard,
+  picker, and Quill embed rendering
+- `lib/features/channels/` — hierarchy repository, browser, and location picker
+- `lib/core/database/` — Drift tables and additive migrations
+- `lib/app/` — Riverpod providers, themes, and local appearance preference
 
-The local SQLite database is never treated as a cache. `serverRevision` lives
-on the database row only, not on the domain `Item`.
+SQLite and managed files are the working source of truth; there is no separate
+authoritative in-memory store.
 
 ## Running
 
 ```sh
 flutter pub get
-dart run build_runner build --delete-conflicting-outputs  # after schema edits
+dart run build_runner build --delete-conflicting-outputs
 flutter run
 ```
 
@@ -64,19 +85,20 @@ flutter run
 flutter test
 ```
 
-Tests run against in-memory SQLite databases and never touch the real
-on-device database file.
+Tests use in-memory SQLite databases and temporary attachment directories; they
+never touch the real app database.
 
 ## Database migrations
 
-Current schema version: **2**. The additive v1→v2 migration creates `channels`
-and adds nullable `items.channel_id`, leaving existing items in Inbox and
-preserving sync tables. Schema snapshots are kept in `drift_schemas/`:
+Current schema version: **3**.
+
+- v1 → v2 creates Channels and adds nullable `items.channel_id`.
+- v2 → v3 adds nullable `items.document_json` and the `attachments` table.
+
+Both migrations are additive. Existing Items, Channels, outbox operations, and
+sync metadata are preserved. Drift snapshots live in `drift_schemas/` and can
+be refreshed with:
 
 ```sh
 dart run drift_dev schema dump lib/core/database/app_database.dart drift_schemas/
 ```
-
-Future schema changes must add stepwise, additive-only steps to the
-`MigrationStrategy` in `lib/core/database/app_database.dart`. The database is
-never recreated or dropped on upgrade.

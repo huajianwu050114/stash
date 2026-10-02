@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stash/app/app.dart';
@@ -94,11 +95,7 @@ void main() {
     await pumpUi(tester);
     await tester.tap(find.byKey(const Key('add-channel-item')));
     await pumpUi(tester);
-    await tester.enterText(
-      find.byKey(const Key('content-field')),
-      'Channel item',
-    );
-    await tester.pump();
+    await enterDocumentText(tester, 'Channel item');
     await tester.tap(find.byKey(const Key('save-item-button')));
     await pumpUi(tester);
 
@@ -112,11 +109,7 @@ void main() {
     await pumpApp(tester, size: const Size(430, 800));
     await tester.tap(find.byKey(const Key('new-item-button')));
     await pumpUi(tester);
-    await tester.enterText(
-      find.byKey(const Key('content-field')),
-      'Inbox item',
-    );
-    await tester.pump();
+    await enterDocumentText(tester, 'Inbox item');
     await tester.tap(find.byKey(const Key('save-item-button')));
     await pumpUi(tester);
     expect((await db.select(db.items).getSingle()).channelId, isNull);
@@ -209,4 +202,18 @@ Future<void> pumpUi(WidgetTester tester) async {
   for (var i = 0; i < 4; i++) {
     await tester.pump(const Duration(milliseconds: 300));
   }
+}
+
+Future<void> enterDocumentText(WidgetTester tester, String text) async {
+  final editor = tester.widget<QuillEditor>(
+    find.byKey(const Key('content-field')),
+  );
+  final replaceLength = editor.controller.document.length - 1;
+  editor.controller.replaceText(
+    0,
+    replaceLength,
+    text,
+    TextSelection.collapsed(offset: text.length),
+  );
+  await tester.pump();
 }

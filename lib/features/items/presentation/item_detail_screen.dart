@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/providers.dart';
 import '../../channels/presentation/location_picker.dart';
 import '../domain/item.dart';
+import 'item_document_view.dart';
 import 'item_editor_screen.dart';
 
 class ItemDetailScreen extends ConsumerWidget {
@@ -126,12 +127,10 @@ class _ItemDetail extends ConsumerWidget {
                   ),
                   const SizedBox(height: 20),
                 ],
-                SelectionArea(
-                  child: Text(
-                    item.content,
-                    style: Theme.of(context).textTheme.bodyLarge
-                        ?.copyWith(height: 1.6),
-                  ),
+                ItemDocumentView(
+                  documentJson: item.documentJson,
+                  legacyText: item.content,
+                  attachmentRepository: ref.watch(attachmentRepositoryProvider),
                 ),
                 if (item.note case final note?) ...[
                   if (note.trim().isNotEmpty) ...[

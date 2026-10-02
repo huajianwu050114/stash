@@ -1,0 +1,141 @@
+import 'package:flutter_quill/flutter_quill.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:stash/core/database/app_database.dart';
+import 'package:stash/features/channels/data/channel_repository.dart';
+import 'package:stash/features/items/data/item_document_codec.dart';
+import 'package:stash/features/items/data/item_repository.dart';
+
+import 'test_database.dart';
+
+void main() {
+  const codec = ItemDocumentCodec();
+
+  test('legacy plain text becomes a usable editor document', () {
+    final document = codec.decode(documentJson: null, legacyText: 'legacy');
+    expect(document.toPlainText(), 'legacy\n');
+    expect(codec.snapshot(document).plainText, 'legacy');
+  });
+
+  test('rich document round-trips with formatting and version envelope', () {
+    final document = Document.fromJson([
+      {
+        'insert': 'Bold',
+        'attributes': {'bold': true},
+      },
+      {'insert': '\n'},
+    ]);
+    final snapshot = codec.snapshot(document);
+    final decoded = codec.decode(
+      documentJson: snapshot.documentJson,
+      legacyText: 'ignored',
+    );
+    expect(decoded.toDelta().toJson(), document.toDelta().toJson());
+    expect(snapshot.documentJson, contains('"version":1'));
+    expect(snapshot.documentJson, contains('"format":"quill-delta"'));
+  });
+
+  test('image-only is valid while empty and whitespace-only are invalid', () {
+    final image = Document.fromJson([
+      {
+        'insert': BlockEmbed.custom(const StashImageEmbed('attachment'))
+            .toJson(),
+      },
+      {'insert': '\n'},
+    ]);
+    expect(codec.snapshot(image).hasMeaningfulBody, isTrue);
+    expect(codec.snapshot(Document()).hasMeaningfulBody, isFalse);
+    expect(
+      codec.snapshot(codec.fromPlainText('  \n\t')).hasMeaningfulBody,
+      isFalse,
+    );
+  });
+
+  group('document repository persistence', () {
+    late AppDatabase db;
+    late ItemRepository items;
+    late ChannelRepository channels;
+
+    setUp(() {
+      db = createInMemoryDatabase();
+      items = ItemRepository(db);
+      channels = ChannelRepository(db);
+    });
+    tearDown(() => db.close());
+
+    test(
+      'text document updates its plain-text projection atomically',
+      () async {
+        final first = codec.snapshot(codec.fromPlainText('first'));
+        final item = await items.createItem(id: 'item', document: first);
+        expect(item.content, 'first');
+        expect(item.documentJson, first.documentJson);
+
+        final second = codec.snapshot(codec.fromPlainText('second paragraph'));
+        final updated = await items.updateItem(item.id, document: second);
+        expect(updated.content, 'second paragraph');
+        expect(updated.documentJson, second.documentJson);
+        final row = await db.select(db.items).getSingle();
+        expect(row.content, 'second paragraph');
+        expect(row.documentJson, second.documentJson);
+        final outbox = await db.select(db.syncOutbox).getSingle();
+        expect(outbox.itemId, item.id);
+        expect(outbox.op, 'upsert');
+      },
+    );
+
+    test(
+      'image-only document is valid but empty documents are rejected',
+      () async {
+        final image = Document.fromJson([
+          {
+            'insert': BlockEmbed.custom(const StashImageEmbed('image-id'))
+                .toJson(),
+          },
+          {'insert': '\n'},
+        ]);
+        final created = await items.createItem(document: codec.snapshot(image));
+        expect(created.content, isEmpty);
+
+        await expectLater(
+          items.createItem(document: codec.snapshot(Document())),
+          throwsArgumentError,
+        );
+        await expectLater(
+          items.createItem(
+            document: codec.snapshot(codec.fromPlainText('   ')),
+          ),
+          throwsArgumentError,
+        );
+      },
+    );
+
+    test(
+      'document edit preserves metadata and channel while clearing title',
+      () async {
+        final channel = await channels.createRootChannel(
+          id: 'channel',
+          name: 'Channel',
+        );
+        final item = await items.createItem(
+          title: 'Title',
+          note: 'Note',
+          tags: ['tag'],
+          channelId: channel.id,
+          document: codec.snapshot(codec.fromPlainText('before')),
+        );
+
+        final updated = await items.updateItem(
+          item.id,
+          title: const FieldUpdate.set(null),
+          document: codec.snapshot(codec.fromPlainText('after')),
+        );
+
+        expect(updated.title, isNull);
+        expect(updated.note, 'Note');
+        expect(updated.tags, ['tag']);
+        expect(updated.channelId, channel.id);
+        expect(updated.content, 'after');
+      },
+    );
+  });
+}

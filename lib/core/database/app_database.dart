@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 
+import 'tables/attachments.dart';
 import 'tables/items.dart';
 import 'tables/channels.dart';
 import 'tables/sync_meta.dart';
@@ -14,7 +15,7 @@ part 'app_database.g.dart';
 /// cache — and every operation is fully local. Schema changes must go through
 /// stepwise, additive `MigrationStrategy` steps (see [migration]); the
 /// database is never recreated or dropped on upgrade.
-@DriftDatabase(tables: [Items, Channels, SyncOutbox, SyncMeta])
+@DriftDatabase(tables: [Items, Channels, Attachments, SyncOutbox, SyncMeta])
 class AppDatabase extends _$AppDatabase {
   /// Opens the real on-device database using the best native SQLite backend
   /// available on the current platform (see `package:drift_flutter`).
@@ -24,7 +25,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.executor);
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -33,6 +34,10 @@ class AppDatabase extends _$AppDatabase {
       if (from < 2) {
         await m.createTable(channels);
         await m.addColumn(items, items.channelId);
+      }
+      if (from < 3) {
+        await m.addColumn(items, items.documentJson);
+        await m.createTable(attachments);
       }
     },
     beforeOpen: (details) async {

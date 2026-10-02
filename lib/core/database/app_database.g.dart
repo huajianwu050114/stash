@@ -57,6 +57,17 @@ class $ItemsTable extends Items with TableInfo<$ItemsTable, ItemRecord> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _documentJsonMeta = const VerificationMeta(
+    'documentJson',
+  );
+  @override
+  late final GeneratedColumn<String> documentJson = GeneratedColumn<String>(
+    'document_json',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _tagsMeta = const VerificationMeta('tags');
   @override
   late final GeneratedColumn<String> tags = GeneratedColumn<String>(
@@ -134,6 +145,7 @@ class $ItemsTable extends Items with TableInfo<$ItemsTable, ItemRecord> {
     content,
     note,
     channelId,
+    documentJson,
     tags,
     isPinned,
     createdAt,
@@ -182,6 +194,15 @@ class $ItemsTable extends Items with TableInfo<$ItemsTable, ItemRecord> {
       context.handle(
         _channelIdMeta,
         channelId.isAcceptableOrUnknown(data['channel_id']!, _channelIdMeta),
+      );
+    }
+    if (data.containsKey('document_json')) {
+      context.handle(
+        _documentJsonMeta,
+        documentJson.isAcceptableOrUnknown(
+          data['document_json']!,
+          _documentJsonMeta,
+        ),
       );
     }
     if (data.containsKey('tags')) {
@@ -256,6 +277,10 @@ class $ItemsTable extends Items with TableInfo<$ItemsTable, ItemRecord> {
         DriftSqlType.string,
         data['${effectivePrefix}channel_id'],
       ),
+      documentJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}document_json'],
+      ),
       tags: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}tags'],
@@ -298,6 +323,9 @@ class ItemRecord extends DataClass implements Insertable<ItemRecord> {
   /// Null means the item lives in Inbox.
   final String? channelId;
 
+  /// Versioned structured document JSON. Null identifies a legacy text item.
+  final String? documentJson;
+
   /// JSON array of strings, encoded by `TagsCodec`. Kept serialized for
   /// Phase 1; the codec is the single seam for a future relational schema.
   final String tags;
@@ -315,6 +343,7 @@ class ItemRecord extends DataClass implements Insertable<ItemRecord> {
     required this.content,
     this.note,
     this.channelId,
+    this.documentJson,
     required this.tags,
     required this.isPinned,
     required this.createdAt,
@@ -335,6 +364,9 @@ class ItemRecord extends DataClass implements Insertable<ItemRecord> {
     }
     if (!nullToAbsent || channelId != null) {
       map['channel_id'] = Variable<String>(channelId);
+    }
+    if (!nullToAbsent || documentJson != null) {
+      map['document_json'] = Variable<String>(documentJson);
     }
     map['tags'] = Variable<String>(tags);
     map['is_pinned'] = Variable<bool>(isPinned);
@@ -358,6 +390,9 @@ class ItemRecord extends DataClass implements Insertable<ItemRecord> {
       channelId: channelId == null && nullToAbsent
           ? const Value.absent()
           : Value(channelId),
+      documentJson: documentJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(documentJson),
       tags: Value(tags),
       isPinned: Value(isPinned),
       createdAt: Value(createdAt),
@@ -380,6 +415,7 @@ class ItemRecord extends DataClass implements Insertable<ItemRecord> {
       content: serializer.fromJson<String>(json['content']),
       note: serializer.fromJson<String?>(json['note']),
       channelId: serializer.fromJson<String?>(json['channelId']),
+      documentJson: serializer.fromJson<String?>(json['documentJson']),
       tags: serializer.fromJson<String>(json['tags']),
       isPinned: serializer.fromJson<bool>(json['isPinned']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
@@ -397,6 +433,7 @@ class ItemRecord extends DataClass implements Insertable<ItemRecord> {
       'content': serializer.toJson<String>(content),
       'note': serializer.toJson<String?>(note),
       'channelId': serializer.toJson<String?>(channelId),
+      'documentJson': serializer.toJson<String?>(documentJson),
       'tags': serializer.toJson<String>(tags),
       'isPinned': serializer.toJson<bool>(isPinned),
       'createdAt': serializer.toJson<DateTime>(createdAt),
@@ -412,6 +449,7 @@ class ItemRecord extends DataClass implements Insertable<ItemRecord> {
     String? content,
     Value<String?> note = const Value.absent(),
     Value<String?> channelId = const Value.absent(),
+    Value<String?> documentJson = const Value.absent(),
     String? tags,
     bool? isPinned,
     DateTime? createdAt,
@@ -424,6 +462,7 @@ class ItemRecord extends DataClass implements Insertable<ItemRecord> {
     content: content ?? this.content,
     note: note.present ? note.value : this.note,
     channelId: channelId.present ? channelId.value : this.channelId,
+    documentJson: documentJson.present ? documentJson.value : this.documentJson,
     tags: tags ?? this.tags,
     isPinned: isPinned ?? this.isPinned,
     createdAt: createdAt ?? this.createdAt,
@@ -438,6 +477,9 @@ class ItemRecord extends DataClass implements Insertable<ItemRecord> {
       content: data.content.present ? data.content.value : this.content,
       note: data.note.present ? data.note.value : this.note,
       channelId: data.channelId.present ? data.channelId.value : this.channelId,
+      documentJson: data.documentJson.present
+          ? data.documentJson.value
+          : this.documentJson,
       tags: data.tags.present ? data.tags.value : this.tags,
       isPinned: data.isPinned.present ? data.isPinned.value : this.isPinned,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
@@ -457,6 +499,7 @@ class ItemRecord extends DataClass implements Insertable<ItemRecord> {
           ..write('content: $content, ')
           ..write('note: $note, ')
           ..write('channelId: $channelId, ')
+          ..write('documentJson: $documentJson, ')
           ..write('tags: $tags, ')
           ..write('isPinned: $isPinned, ')
           ..write('createdAt: $createdAt, ')
@@ -474,6 +517,7 @@ class ItemRecord extends DataClass implements Insertable<ItemRecord> {
     content,
     note,
     channelId,
+    documentJson,
     tags,
     isPinned,
     createdAt,
@@ -490,6 +534,7 @@ class ItemRecord extends DataClass implements Insertable<ItemRecord> {
           other.content == this.content &&
           other.note == this.note &&
           other.channelId == this.channelId &&
+          other.documentJson == this.documentJson &&
           other.tags == this.tags &&
           other.isPinned == this.isPinned &&
           other.createdAt == this.createdAt &&
@@ -504,6 +549,7 @@ class ItemsCompanion extends UpdateCompanion<ItemRecord> {
   final Value<String> content;
   final Value<String?> note;
   final Value<String?> channelId;
+  final Value<String?> documentJson;
   final Value<String> tags;
   final Value<bool> isPinned;
   final Value<DateTime> createdAt;
@@ -517,6 +563,7 @@ class ItemsCompanion extends UpdateCompanion<ItemRecord> {
     this.content = const Value.absent(),
     this.note = const Value.absent(),
     this.channelId = const Value.absent(),
+    this.documentJson = const Value.absent(),
     this.tags = const Value.absent(),
     this.isPinned = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -531,6 +578,7 @@ class ItemsCompanion extends UpdateCompanion<ItemRecord> {
     required String content,
     this.note = const Value.absent(),
     this.channelId = const Value.absent(),
+    this.documentJson = const Value.absent(),
     this.tags = const Value.absent(),
     this.isPinned = const Value.absent(),
     required DateTime createdAt,
@@ -548,6 +596,7 @@ class ItemsCompanion extends UpdateCompanion<ItemRecord> {
     Expression<String>? content,
     Expression<String>? note,
     Expression<String>? channelId,
+    Expression<String>? documentJson,
     Expression<String>? tags,
     Expression<bool>? isPinned,
     Expression<DateTime>? createdAt,
@@ -562,6 +611,7 @@ class ItemsCompanion extends UpdateCompanion<ItemRecord> {
       if (content != null) 'content': content,
       if (note != null) 'note': note,
       if (channelId != null) 'channel_id': channelId,
+      if (documentJson != null) 'document_json': documentJson,
       if (tags != null) 'tags': tags,
       if (isPinned != null) 'is_pinned': isPinned,
       if (createdAt != null) 'created_at': createdAt,
@@ -578,6 +628,7 @@ class ItemsCompanion extends UpdateCompanion<ItemRecord> {
     Value<String>? content,
     Value<String?>? note,
     Value<String?>? channelId,
+    Value<String?>? documentJson,
     Value<String>? tags,
     Value<bool>? isPinned,
     Value<DateTime>? createdAt,
@@ -592,6 +643,7 @@ class ItemsCompanion extends UpdateCompanion<ItemRecord> {
       content: content ?? this.content,
       note: note ?? this.note,
       channelId: channelId ?? this.channelId,
+      documentJson: documentJson ?? this.documentJson,
       tags: tags ?? this.tags,
       isPinned: isPinned ?? this.isPinned,
       createdAt: createdAt ?? this.createdAt,
@@ -619,6 +671,9 @@ class ItemsCompanion extends UpdateCompanion<ItemRecord> {
     }
     if (channelId.present) {
       map['channel_id'] = Variable<String>(channelId.value);
+    }
+    if (documentJson.present) {
+      map['document_json'] = Variable<String>(documentJson.value);
     }
     if (tags.present) {
       map['tags'] = Variable<String>(tags.value);
@@ -652,6 +707,7 @@ class ItemsCompanion extends UpdateCompanion<ItemRecord> {
           ..write('content: $content, ')
           ..write('note: $note, ')
           ..write('channelId: $channelId, ')
+          ..write('documentJson: $documentJson, ')
           ..write('tags: $tags, ')
           ..write('isPinned: $isPinned, ')
           ..write('createdAt: $createdAt, ')
@@ -1070,6 +1126,534 @@ class ChannelsCompanion extends UpdateCompanion<ChannelRecord> {
           ..write('parentId: $parentId, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $AttachmentsTable extends Attachments
+    with TableInfo<$AttachmentsTable, AttachmentRecord> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $AttachmentsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _itemIdMeta = const VerificationMeta('itemId');
+  @override
+  late final GeneratedColumn<String> itemId = GeneratedColumn<String>(
+    'item_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _mimeTypeMeta = const VerificationMeta(
+    'mimeType',
+  );
+  @override
+  late final GeneratedColumn<String> mimeType = GeneratedColumn<String>(
+    'mime_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _originalFileNameMeta = const VerificationMeta(
+    'originalFileName',
+  );
+  @override
+  late final GeneratedColumn<String> originalFileName = GeneratedColumn<String>(
+    'original_file_name',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _relativePathMeta = const VerificationMeta(
+    'relativePath',
+  );
+  @override
+  late final GeneratedColumn<String> relativePath = GeneratedColumn<String>(
+    'relative_path',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _byteSizeMeta = const VerificationMeta(
+    'byteSize',
+  );
+  @override
+  late final GeneratedColumn<int> byteSize = GeneratedColumn<int>(
+    'byte_size',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    itemId,
+    mimeType,
+    originalFileName,
+    relativePath,
+    byteSize,
+    createdAt,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'attachments';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<AttachmentRecord> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('item_id')) {
+      context.handle(
+        _itemIdMeta,
+        itemId.isAcceptableOrUnknown(data['item_id']!, _itemIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_itemIdMeta);
+    }
+    if (data.containsKey('mime_type')) {
+      context.handle(
+        _mimeTypeMeta,
+        mimeType.isAcceptableOrUnknown(data['mime_type']!, _mimeTypeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_mimeTypeMeta);
+    }
+    if (data.containsKey('original_file_name')) {
+      context.handle(
+        _originalFileNameMeta,
+        originalFileName.isAcceptableOrUnknown(
+          data['original_file_name']!,
+          _originalFileNameMeta,
+        ),
+      );
+    }
+    if (data.containsKey('relative_path')) {
+      context.handle(
+        _relativePathMeta,
+        relativePath.isAcceptableOrUnknown(
+          data['relative_path']!,
+          _relativePathMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_relativePathMeta);
+    }
+    if (data.containsKey('byte_size')) {
+      context.handle(
+        _byteSizeMeta,
+        byteSize.isAcceptableOrUnknown(data['byte_size']!, _byteSizeMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  AttachmentRecord map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return AttachmentRecord(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      itemId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}item_id'],
+      )!,
+      mimeType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}mime_type'],
+      )!,
+      originalFileName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}original_file_name'],
+      ),
+      relativePath: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}relative_path'],
+      )!,
+      byteSize: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}byte_size'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $AttachmentsTable createAlias(String alias) {
+    return $AttachmentsTable(attachedDatabase, alias);
+  }
+}
+
+class AttachmentRecord extends DataClass
+    implements Insertable<AttachmentRecord> {
+  final String id;
+  final String itemId;
+  final String mimeType;
+  final String? originalFileName;
+
+  /// Path relative to the app-managed support directory.
+  final String relativePath;
+  final int? byteSize;
+  final DateTime createdAt;
+  final DateTime? deletedAt;
+  const AttachmentRecord({
+    required this.id,
+    required this.itemId,
+    required this.mimeType,
+    this.originalFileName,
+    required this.relativePath,
+    this.byteSize,
+    required this.createdAt,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['item_id'] = Variable<String>(itemId);
+    map['mime_type'] = Variable<String>(mimeType);
+    if (!nullToAbsent || originalFileName != null) {
+      map['original_file_name'] = Variable<String>(originalFileName);
+    }
+    map['relative_path'] = Variable<String>(relativePath);
+    if (!nullToAbsent || byteSize != null) {
+      map['byte_size'] = Variable<int>(byteSize);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  AttachmentsCompanion toCompanion(bool nullToAbsent) {
+    return AttachmentsCompanion(
+      id: Value(id),
+      itemId: Value(itemId),
+      mimeType: Value(mimeType),
+      originalFileName: originalFileName == null && nullToAbsent
+          ? const Value.absent()
+          : Value(originalFileName),
+      relativePath: Value(relativePath),
+      byteSize: byteSize == null && nullToAbsent
+          ? const Value.absent()
+          : Value(byteSize),
+      createdAt: Value(createdAt),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory AttachmentRecord.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return AttachmentRecord(
+      id: serializer.fromJson<String>(json['id']),
+      itemId: serializer.fromJson<String>(json['itemId']),
+      mimeType: serializer.fromJson<String>(json['mimeType']),
+      originalFileName: serializer.fromJson<String?>(json['originalFileName']),
+      relativePath: serializer.fromJson<String>(json['relativePath']),
+      byteSize: serializer.fromJson<int?>(json['byteSize']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'itemId': serializer.toJson<String>(itemId),
+      'mimeType': serializer.toJson<String>(mimeType),
+      'originalFileName': serializer.toJson<String?>(originalFileName),
+      'relativePath': serializer.toJson<String>(relativePath),
+      'byteSize': serializer.toJson<int?>(byteSize),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  AttachmentRecord copyWith({
+    String? id,
+    String? itemId,
+    String? mimeType,
+    Value<String?> originalFileName = const Value.absent(),
+    String? relativePath,
+    Value<int?> byteSize = const Value.absent(),
+    DateTime? createdAt,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => AttachmentRecord(
+    id: id ?? this.id,
+    itemId: itemId ?? this.itemId,
+    mimeType: mimeType ?? this.mimeType,
+    originalFileName: originalFileName.present
+        ? originalFileName.value
+        : this.originalFileName,
+    relativePath: relativePath ?? this.relativePath,
+    byteSize: byteSize.present ? byteSize.value : this.byteSize,
+    createdAt: createdAt ?? this.createdAt,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  AttachmentRecord copyWithCompanion(AttachmentsCompanion data) {
+    return AttachmentRecord(
+      id: data.id.present ? data.id.value : this.id,
+      itemId: data.itemId.present ? data.itemId.value : this.itemId,
+      mimeType: data.mimeType.present ? data.mimeType.value : this.mimeType,
+      originalFileName: data.originalFileName.present
+          ? data.originalFileName.value
+          : this.originalFileName,
+      relativePath: data.relativePath.present
+          ? data.relativePath.value
+          : this.relativePath,
+      byteSize: data.byteSize.present ? data.byteSize.value : this.byteSize,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AttachmentRecord(')
+          ..write('id: $id, ')
+          ..write('itemId: $itemId, ')
+          ..write('mimeType: $mimeType, ')
+          ..write('originalFileName: $originalFileName, ')
+          ..write('relativePath: $relativePath, ')
+          ..write('byteSize: $byteSize, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    itemId,
+    mimeType,
+    originalFileName,
+    relativePath,
+    byteSize,
+    createdAt,
+    deletedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is AttachmentRecord &&
+          other.id == this.id &&
+          other.itemId == this.itemId &&
+          other.mimeType == this.mimeType &&
+          other.originalFileName == this.originalFileName &&
+          other.relativePath == this.relativePath &&
+          other.byteSize == this.byteSize &&
+          other.createdAt == this.createdAt &&
+          other.deletedAt == this.deletedAt);
+}
+
+class AttachmentsCompanion extends UpdateCompanion<AttachmentRecord> {
+  final Value<String> id;
+  final Value<String> itemId;
+  final Value<String> mimeType;
+  final Value<String?> originalFileName;
+  final Value<String> relativePath;
+  final Value<int?> byteSize;
+  final Value<DateTime> createdAt;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const AttachmentsCompanion({
+    this.id = const Value.absent(),
+    this.itemId = const Value.absent(),
+    this.mimeType = const Value.absent(),
+    this.originalFileName = const Value.absent(),
+    this.relativePath = const Value.absent(),
+    this.byteSize = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  AttachmentsCompanion.insert({
+    required String id,
+    required String itemId,
+    required String mimeType,
+    this.originalFileName = const Value.absent(),
+    required String relativePath,
+    this.byteSize = const Value.absent(),
+    required DateTime createdAt,
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       itemId = Value(itemId),
+       mimeType = Value(mimeType),
+       relativePath = Value(relativePath),
+       createdAt = Value(createdAt);
+  static Insertable<AttachmentRecord> custom({
+    Expression<String>? id,
+    Expression<String>? itemId,
+    Expression<String>? mimeType,
+    Expression<String>? originalFileName,
+    Expression<String>? relativePath,
+    Expression<int>? byteSize,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (itemId != null) 'item_id': itemId,
+      if (mimeType != null) 'mime_type': mimeType,
+      if (originalFileName != null) 'original_file_name': originalFileName,
+      if (relativePath != null) 'relative_path': relativePath,
+      if (byteSize != null) 'byte_size': byteSize,
+      if (createdAt != null) 'created_at': createdAt,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  AttachmentsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? itemId,
+    Value<String>? mimeType,
+    Value<String?>? originalFileName,
+    Value<String>? relativePath,
+    Value<int?>? byteSize,
+    Value<DateTime>? createdAt,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return AttachmentsCompanion(
+      id: id ?? this.id,
+      itemId: itemId ?? this.itemId,
+      mimeType: mimeType ?? this.mimeType,
+      originalFileName: originalFileName ?? this.originalFileName,
+      relativePath: relativePath ?? this.relativePath,
+      byteSize: byteSize ?? this.byteSize,
+      createdAt: createdAt ?? this.createdAt,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (itemId.present) {
+      map['item_id'] = Variable<String>(itemId.value);
+    }
+    if (mimeType.present) {
+      map['mime_type'] = Variable<String>(mimeType.value);
+    }
+    if (originalFileName.present) {
+      map['original_file_name'] = Variable<String>(originalFileName.value);
+    }
+    if (relativePath.present) {
+      map['relative_path'] = Variable<String>(relativePath.value);
+    }
+    if (byteSize.present) {
+      map['byte_size'] = Variable<int>(byteSize.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AttachmentsCompanion(')
+          ..write('id: $id, ')
+          ..write('itemId: $itemId, ')
+          ..write('mimeType: $mimeType, ')
+          ..write('originalFileName: $originalFileName, ')
+          ..write('relativePath: $relativePath, ')
+          ..write('byteSize: $byteSize, ')
+          ..write('createdAt: $createdAt, ')
           ..write('deletedAt: $deletedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -1709,6 +2293,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
   late final $ItemsTable items = $ItemsTable(this);
   late final $ChannelsTable channels = $ChannelsTable(this);
+  late final $AttachmentsTable attachments = $AttachmentsTable(this);
   late final $SyncOutboxTable syncOutbox = $SyncOutboxTable(this);
   late final $SyncMetaTable syncMeta = $SyncMetaTable(this);
   @override
@@ -1718,6 +2303,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   List<DatabaseSchemaEntity> get allSchemaEntities => [
     items,
     channels,
+    attachments,
     syncOutbox,
     syncMeta,
   ];
@@ -1732,6 +2318,7 @@ typedef $$ItemsTableCreateCompanionBuilder = ItemsCompanion Function({
   required String content,
   Value<String?> note,
   Value<String?> channelId,
+  Value<String?> documentJson,
   Value<String> tags,
   Value<bool> isPinned,
   required DateTime createdAt,
@@ -1746,6 +2333,7 @@ typedef $$ItemsTableUpdateCompanionBuilder = ItemsCompanion Function({
   Value<String> content,
   Value<String?> note,
   Value<String?> channelId,
+  Value<String?> documentJson,
   Value<String> tags,
   Value<bool> isPinned,
   Value<DateTime> createdAt,
@@ -1785,6 +2373,11 @@ class $$ItemsTableFilterComposer extends Composer<_$AppDatabase, $ItemsTable> {
 
   ColumnFilters<String> get channelId => $composableBuilder(
     column: $table.channelId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get documentJson => $composableBuilder(
+    column: $table.documentJson,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -1853,6 +2446,11 @@ class $$ItemsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get documentJson => $composableBuilder(
+    column: $table.documentJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get tags => $composableBuilder(
     column: $table.tags,
     builder: (column) => ColumnOrderings(column),
@@ -1908,6 +2506,11 @@ class $$ItemsTableAnnotationComposer
   GeneratedColumn<String> get channelId =>
       $composableBuilder(column: $table.channelId, builder: (column) => column);
 
+  GeneratedColumn<String> get documentJson => $composableBuilder(
+    column: $table.documentJson,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get tags =>
       $composableBuilder(column: $table.tags, builder: (column) => column);
 
@@ -1962,6 +2565,7 @@ class $$ItemsTableTableManager
                 Value<String> content = const Value.absent(),
                 Value<String?> note = const Value.absent(),
                 Value<String?> channelId = const Value.absent(),
+                Value<String?> documentJson = const Value.absent(),
                 Value<String> tags = const Value.absent(),
                 Value<bool> isPinned = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -1975,6 +2579,7 @@ class $$ItemsTableTableManager
                 content: content,
                 note: note,
                 channelId: channelId,
+                documentJson: documentJson,
                 tags: tags,
                 isPinned: isPinned,
                 createdAt: createdAt,
@@ -1990,6 +2595,7 @@ class $$ItemsTableTableManager
                 required String content,
                 Value<String?> note = const Value.absent(),
                 Value<String?> channelId = const Value.absent(),
+                Value<String?> documentJson = const Value.absent(),
                 Value<String> tags = const Value.absent(),
                 Value<bool> isPinned = const Value.absent(),
                 required DateTime createdAt,
@@ -2003,6 +2609,7 @@ class $$ItemsTableTableManager
                 content: content,
                 note: note,
                 channelId: channelId,
+                documentJson: documentJson,
                 tags: tags,
                 isPinned: isPinned,
                 createdAt: createdAt,
@@ -2373,6 +2980,276 @@ typedef $$ChannelsTableProcessedTableManager =
       (ChannelRecord, $$ChannelsTableReferences),
       ChannelRecord,
       PrefetchHooks Function({bool parentId})
+    >;
+typedef $$AttachmentsTableCreateCompanionBuilder =
+    AttachmentsCompanion Function({
+      required String id,
+      required String itemId,
+      required String mimeType,
+      Value<String?> originalFileName,
+      required String relativePath,
+      Value<int?> byteSize,
+      required DateTime createdAt,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$AttachmentsTableUpdateCompanionBuilder =
+    AttachmentsCompanion Function({
+      Value<String> id,
+      Value<String> itemId,
+      Value<String> mimeType,
+      Value<String?> originalFileName,
+      Value<String> relativePath,
+      Value<int?> byteSize,
+      Value<DateTime> createdAt,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$AttachmentsTableFilterComposer
+    extends Composer<_$AppDatabase, $AttachmentsTable> {
+  $$AttachmentsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get itemId => $composableBuilder(
+    column: $table.itemId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get mimeType => $composableBuilder(
+    column: $table.mimeType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get originalFileName => $composableBuilder(
+    column: $table.originalFileName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get relativePath => $composableBuilder(
+    column: $table.relativePath,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get byteSize => $composableBuilder(
+    column: $table.byteSize,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$AttachmentsTableOrderingComposer
+    extends Composer<_$AppDatabase, $AttachmentsTable> {
+  $$AttachmentsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get itemId => $composableBuilder(
+    column: $table.itemId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get mimeType => $composableBuilder(
+    column: $table.mimeType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get originalFileName => $composableBuilder(
+    column: $table.originalFileName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get relativePath => $composableBuilder(
+    column: $table.relativePath,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get byteSize => $composableBuilder(
+    column: $table.byteSize,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$AttachmentsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $AttachmentsTable> {
+  $$AttachmentsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get itemId =>
+      $composableBuilder(column: $table.itemId, builder: (column) => column);
+
+  GeneratedColumn<String> get mimeType =>
+      $composableBuilder(column: $table.mimeType, builder: (column) => column);
+
+  GeneratedColumn<String> get originalFileName => $composableBuilder(
+    column: $table.originalFileName,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get relativePath => $composableBuilder(
+    column: $table.relativePath,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get byteSize =>
+      $composableBuilder(column: $table.byteSize, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$AttachmentsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $AttachmentsTable,
+          AttachmentRecord,
+          $$AttachmentsTableFilterComposer,
+          $$AttachmentsTableOrderingComposer,
+          $$AttachmentsTableAnnotationComposer,
+          $$AttachmentsTableCreateCompanionBuilder,
+          $$AttachmentsTableUpdateCompanionBuilder,
+          (
+            AttachmentRecord,
+            BaseReferences<_$AppDatabase, $AttachmentsTable, AttachmentRecord>,
+          ),
+          AttachmentRecord,
+          PrefetchHooks Function()
+        > {
+  $$AttachmentsTableTableManager(_$AppDatabase db, $AttachmentsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$AttachmentsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$AttachmentsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$AttachmentsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> itemId = const Value.absent(),
+                Value<String> mimeType = const Value.absent(),
+                Value<String?> originalFileName = const Value.absent(),
+                Value<String> relativePath = const Value.absent(),
+                Value<int?> byteSize = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => AttachmentsCompanion(
+                id: id,
+                itemId: itemId,
+                mimeType: mimeType,
+                originalFileName: originalFileName,
+                relativePath: relativePath,
+                byteSize: byteSize,
+                createdAt: createdAt,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String itemId,
+                required String mimeType,
+                Value<String?> originalFileName = const Value.absent(),
+                required String relativePath,
+                Value<int?> byteSize = const Value.absent(),
+                required DateTime createdAt,
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => AttachmentsCompanion.insert(
+                id: id,
+                itemId: itemId,
+                mimeType: mimeType,
+                originalFileName: originalFileName,
+                relativePath: relativePath,
+                byteSize: byteSize,
+                createdAt: createdAt,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$AttachmentsTable, AttachmentRecord>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $AttachmentsTable,
+                    AttachmentRecord
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$AttachmentsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $AttachmentsTable,
+      AttachmentRecord,
+      $$AttachmentsTableFilterComposer,
+      $$AttachmentsTableOrderingComposer,
+      $$AttachmentsTableAnnotationComposer,
+      $$AttachmentsTableCreateCompanionBuilder,
+      $$AttachmentsTableUpdateCompanionBuilder,
+      (
+        AttachmentRecord,
+        BaseReferences<_$AppDatabase, $AttachmentsTable, AttachmentRecord>,
+      ),
+      AttachmentRecord,
+      PrefetchHooks Function()
     >;
 typedef $$SyncOutboxTableCreateCompanionBuilder = SyncOutboxCompanion Function({
   required String itemId,
@@ -2754,6 +3631,8 @@ class $AppDatabaseManager {
       $$ItemsTableTableManager(_db, _db.items);
   $$ChannelsTableTableManager get channels =>
       $$ChannelsTableTableManager(_db, _db.channels);
+  $$AttachmentsTableTableManager get attachments =>
+      $$AttachmentsTableTableManager(_db, _db.attachments);
   $$SyncOutboxTableTableManager get syncOutbox =>
       $$SyncOutboxTableTableManager(_db, _db.syncOutbox);
   $$SyncMetaTableTableManager get syncMeta =>

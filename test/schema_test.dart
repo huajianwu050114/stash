@@ -24,6 +24,7 @@ void main() {
       'content',
       'note',
       'channel_id',
+      'document_json',
       'tags',
       'is_pinned',
       'created_at',
@@ -37,6 +38,16 @@ void main() {
       'parent_id',
       'created_at',
       'updated_at',
+      'deleted_at',
+    },
+    'attachments': {
+      'id',
+      'item_id',
+      'mime_type',
+      'original_file_name',
+      'relative_path',
+      'byte_size',
+      'created_at',
       'deleted_at',
     },
     'sync_outbox': {
@@ -66,14 +77,14 @@ void main() {
     return result;
   }
 
-  test('database is created at schema version 2', () async {
-    expect(db.schemaVersion, 2);
+  test('database is created at schema version 3', () async {
+    expect(db.schemaVersion, 3);
     final version = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(version.data['user_version'], 2);
+    expect(version.data['user_version'], 3);
   });
 
   test(
-    'live schema matches the expected Phase 2.5 tables and columns',
+    'live schema matches the expected Phase 2.6 tables and columns',
     () async {
       final live = await liveSchema();
       expect(live.keys.toSet(), expectedTables.keys.toSet());
@@ -88,7 +99,7 @@ void main() {
   );
 
   test('committed schema export matches the live schema', () async {
-    final exportFile = File('drift_schemas/drift_schema_v2.json');
+    final exportFile = File('drift_schemas/drift_schema_v3.json');
     expect(
       exportFile.existsSync(),
       isTrue,

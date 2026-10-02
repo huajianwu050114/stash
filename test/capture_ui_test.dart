@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stash/app/app.dart';
@@ -46,15 +47,10 @@ void main() {
     expect(find.text('New item'), findsOneWidget);
     expect(saveButton(tester).onPressed, isNull);
 
-    await tester.enterText(find.byKey(const Key('content-field')), '   ');
-    await tester.pump();
+    await enterDocumentText(tester, '   ');
     expect(saveButton(tester).onPressed, isNull);
 
-    await tester.enterText(
-      find.byKey(const Key('content-field')),
-      'ssh user@example.test -p 2222',
-    );
-    await tester.pump();
+    await enterDocumentText(tester, 'ssh user@example.test -p 2222');
     expect(saveButton(tester).onPressed, isNotNull);
     await tester.tap(find.byKey(const Key('save-item-button')));
     await pumpUi(tester);
@@ -92,11 +88,8 @@ void main() {
       await tester.tap(find.byKey(Key('item-preview-${item.id}')));
       await pumpUi(tester);
       expect(
-        find.descendant(
-          of: find.byType(SelectionArea),
-          matching: find.text('A full value that should be visible in detail.'),
-        ),
-        findsOneWidget,
+        documentViewText(tester),
+        contains('A full value that should be visible in detail.'),
       );
       expect(find.byKey(const Key('copy-item-button')), findsOneWidget);
       expect(find.text('Old note'), findsOneWidget);
@@ -120,10 +113,11 @@ void main() {
       await tester.tap(find.byKey(const Key('edit-item-button')));
       await pumpUi(tester);
       await tester.enterText(find.byKey(const Key('title-field')), '');
-      await tester.enterText(
-        find.byKey(const Key('content-field')),
-        'Changed content',
-      );
+      await enterDocumentText(tester, 'Changed content');
+      await tester.ensureVisible(find.byKey(const Key('details-section')));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('details-section')));
+      await pumpUi(tester);
       await tester.ensureVisible(find.byKey(const Key('note-field')));
       await tester.enterText(find.byKey(const Key('note-field')), '');
       await tester.ensureVisible(find.byKey(const Key('tags-field')));
@@ -136,13 +130,7 @@ void main() {
       expect(stored.title, isNull);
       expect(stored.note, isNull);
       expect(stored.tags, ['work', 'cli']);
-      expect(
-        find.descendant(
-          of: find.byType(SelectionArea),
-          matching: find.text('Changed content'),
-        ),
-        findsOneWidget,
-      );
+      expect(documentViewText(tester), contains('Changed content'));
       expect(find.text('Old title'), findsNothing);
       expect(find.text('Old note'), findsNothing);
 
@@ -236,3 +224,23 @@ Future<void> pumpUi(WidgetTester tester) async {
     await tester.pump(const Duration(milliseconds: 350));
   }
 }
+
+Future<void> enterDocumentText(WidgetTester tester, String text) async {
+  final editor = tester.widget<QuillEditor>(
+    find.byKey(const Key('content-field')),
+  );
+  final replaceLength = editor.controller.document.length - 1;
+  editor.controller.replaceText(
+    0,
+    replaceLength,
+    text,
+    TextSelection.collapsed(offset: text.length),
+  );
+  await tester.pump();
+}
+
+String documentViewText(WidgetTester tester) => tester
+    .widget<QuillEditor>(find.byKey(const Key('document-view')))
+    .controller
+    .document
+    .toPlainText();

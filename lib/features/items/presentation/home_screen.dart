@@ -65,6 +65,30 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ?.copyWith(fontWeight: FontWeight.w700, letterSpacing: -0.6),
           ),
           actions: [
+            PopupMenuButton<ThemeMode>(
+              key: const Key('appearance-menu'),
+              tooltip: 'Appearance',
+              icon: const Icon(Icons.brightness_6_outlined),
+              onSelected: (mode) =>
+                  ref.read(appearanceProvider.notifier).setThemeMode(mode),
+              itemBuilder: (_) => const [
+                PopupMenuItem(
+                  key: Key('appearance-system'),
+                  value: ThemeMode.system,
+                  child: Text('System appearance'),
+                ),
+                PopupMenuItem(
+                  key: Key('appearance-light'),
+                  value: ThemeMode.light,
+                  child: Text('Light'),
+                ),
+                PopupMenuItem(
+                  key: Key('appearance-dark'),
+                  value: ThemeMode.dark,
+                  child: Text('Dark'),
+                ),
+              ],
+            ),
             FilledButton.icon(
               key: const Key('new-item-button'),
               onPressed: () => _createItem(context, null),

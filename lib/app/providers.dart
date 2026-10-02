@@ -1,10 +1,14 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/material.dart';
 
 import '../core/database/app_database.dart';
+import '../features/attachments/data/attachment_repository.dart';
+import '../features/attachments/data/image_import_sources.dart';
 import '../features/channels/data/channel_repository.dart';
 import '../features/channels/domain/channel.dart';
 import '../features/items/data/item_repository.dart';
 import '../features/items/domain/item.dart';
+import 'appearance.dart';
 
 /// The single on-device SQLite database. The database is the source of
 /// truth; no additional in-memory copy of items is kept anywhere.
@@ -21,6 +25,37 @@ final itemRepositoryProvider = Provider<ItemRepository>(
 final channelRepositoryProvider = Provider<ChannelRepository>(
   (ref) => ChannelRepository(ref.watch(databaseProvider)),
 );
+
+final attachmentRepositoryProvider = Provider<AttachmentRepository>(
+  (ref) => AttachmentRepository(ref.watch(databaseProvider)),
+);
+
+final clipboardReaderProvider = Provider<ClipboardReaderGateway>(
+  (ref) => const SystemClipboardReaderGateway(),
+);
+
+final imagePickerProvider = Provider<ImagePickerGateway>(
+  (ref) => const FilePickerImageGateway(),
+);
+
+final appearanceRepositoryProvider = Provider<AppearanceRepository>(
+  (ref) => AppearanceRepository(SharedPreferencesAppearancePreferences()),
+);
+
+final appearanceProvider =
+    AsyncNotifierProvider<AppearanceController, ThemeMode>(
+      AppearanceController.new,
+    );
+
+class AppearanceController extends AsyncNotifier<ThemeMode> {
+  @override
+  Future<ThemeMode> build() => ref.watch(appearanceRepositoryProvider).load();
+
+  Future<void> setThemeMode(ThemeMode mode) async {
+    state = AsyncData(mode);
+    await ref.read(appearanceRepositoryProvider).save(mode);
+  }
+}
 
 /// Reactive view of all non-deleted items, newest-updated first.
 final activeItemsProvider = StreamProvider<List<Item>>(

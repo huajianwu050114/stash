@@ -3,6 +3,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../../core/database/app_database.dart';
 import '../../../core/database/tags_codec.dart';
+import 'item_document_codec.dart';
 import '../domain/item.dart';
 
 /// Describes whether an optional field should be left alone or assigned a
@@ -92,21 +93,26 @@ class ItemRepository {
   Future<Item> createItem({
     String? id,
     String? title,
-    required String content,
+    String content = '',
     String? note,
     List<String> tags = const [],
     bool isPinned = false,
     String? channelId,
+    ItemDocumentSnapshot? document,
   }) async {
     return _db.transaction(() async {
       await _validateTargetChannel(channelId);
+      final savedContent = document == null
+          ? _validatedLegacyContent(content)
+          : _validatedDocument(document).plainText;
       final now = DateTime.now();
       final item = Item(
         id: id ?? _uuid.v4(),
         title: title,
-        content: _validatedContent(content),
+        content: savedContent,
         note: note,
         channelId: channelId,
+        documentJson: document?.documentJson,
         tags: tags,
         isPinned: isPinned,
         createdAt: now,
@@ -121,6 +127,7 @@ class ItemRepository {
               content: item.content,
               note: Value(item.note),
               channelId: Value(item.channelId),
+              documentJson: Value(item.documentJson),
               tags: Value(TagsCodec.encode(item.tags)),
               isPinned: Value(item.isPinned),
               createdAt: item.createdAt,
@@ -157,6 +164,7 @@ class ItemRepository {
           content: record.content,
           note: record.note,
           channelId: channelId,
+          documentJson: record.documentJson,
           tags: TagsCodec.decode(record.tags),
           isPinned: record.isPinned,
           createdAt: record.createdAt,
@@ -175,6 +183,7 @@ class ItemRepository {
     String? content,
     FieldUpdate<String?> note = const FieldUpdate.unchanged(),
     List<String>? tags,
+    ItemDocumentSnapshot? document,
   }) => _db.transaction(() async {
     final record = await _recordById(id);
     if (record == null) {
@@ -187,18 +196,31 @@ class ItemRepository {
     if (!title.isChanged &&
         content == null &&
         !note.isChanged &&
-        tags == null) {
+        tags == null &&
+        document == null) {
       return current;
+    }
+    if (content != null && document != null) {
+      throw ArgumentError('Set either content or document, not both.');
     }
     final updatedTitle = title.valueOr(current.title);
     final updatedNote = note.valueOr(current.note);
+    final updatedContent = document != null
+        ? _validatedDocument(document).plainText
+        : content == null
+        ? current.content
+        : _validatedLegacyContent(content);
+    final updatedDocumentJson = document != null
+        ? document.documentJson
+        : content != null
+        ? null
+        : current.documentJson;
     final now = DateTime.now();
     await (_db.update(_db.items)..where((t) => t.id.equals(id))).write(
       ItemsCompanion(
         title: Value(updatedTitle),
-        content: Value(
-          content == null ? current.content : _validatedContent(content),
-        ),
+        content: Value(updatedContent),
+        documentJson: Value(updatedDocumentJson),
         note: Value(updatedNote),
         tags: Value(
           tags == null
@@ -216,9 +238,10 @@ class ItemRepository {
     return Item(
       id: current.id,
       title: updatedTitle,
-      content: content ?? current.content,
+      content: updatedContent,
       note: updatedNote,
       channelId: current.channelId,
+      documentJson: updatedDocumentJson,
       tags: tags ?? current.tags,
       isPinned: current.isPinned,
       createdAt: current.createdAt,
@@ -254,6 +277,7 @@ class ItemRepository {
       content: record.content,
       note: record.note,
       channelId: record.channelId,
+      documentJson: record.documentJson,
       tags: TagsCodec.decode(record.tags),
       isPinned: isPinned,
       createdAt: record.createdAt,
@@ -287,6 +311,7 @@ class ItemRepository {
       content: record.content,
       note: record.note,
       channelId: record.channelId,
+      documentJson: record.documentJson,
       tags: TagsCodec.decode(record.tags),
       isPinned: record.isPinned,
       createdAt: record.createdAt,
@@ -324,6 +349,7 @@ class ItemRepository {
       content: record.content,
       note: record.note,
       channelId: restoredChannelId,
+      documentJson: record.documentJson,
       tags: TagsCodec.decode(record.tags),
       isPinned: record.isPinned,
       createdAt: record.createdAt,
@@ -409,11 +435,24 @@ class ItemRepository {
     return channel == null || channel.deletedAt != null ? null : channelId;
   }
 
-  static String _validatedContent(String content) {
+  static String _validatedLegacyContent(String content) {
     if (content.trim().isEmpty) {
       throw ArgumentError.value(content, 'content', 'must not be blank');
     }
     return content;
+  }
+
+  static ItemDocumentSnapshot _validatedDocument(
+    ItemDocumentSnapshot document,
+  ) {
+    if (!document.hasMeaningfulBody) {
+      throw ArgumentError.value(
+        document.documentJson,
+        'document',
+        'must contain text or an image',
+      );
+    }
+    return document;
   }
 }
 
@@ -424,6 +463,7 @@ extension on ItemRecord {
     content: content,
     note: note,
     channelId: channelId,
+    documentJson: documentJson,
     tags: TagsCodec.decode(tags),
     isPinned: isPinned,
     createdAt: createdAt,
