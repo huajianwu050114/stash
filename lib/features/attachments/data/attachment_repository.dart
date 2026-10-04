@@ -94,7 +94,7 @@ class AttachmentRepository {
       )..where((row) => row.id.equals(id))).getSingleOrNull();
       if (record == null) continue;
       final file = await _resolveRelativePath(record.relativePath);
-      if (await file.exists()) await file.delete();
+      await _deleteWithRetry(file);
       await (_db.delete(
         _db.attachments,
       )..where((row) => row.id.equals(id))).go();
@@ -129,6 +129,19 @@ class AttachmentRepository {
       throw StateError('Attachment path escapes managed storage.');
     }
     return File(resolved);
+  }
+
+  Future<void> _deleteWithRetry(File file) async {
+    for (var attempt = 0; attempt < 10; attempt++) {
+      if (!await file.exists()) return;
+      try {
+        await file.delete();
+        return;
+      } on FileSystemException {
+        if (attempt == 9) rethrow;
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      }
+    }
   }
 
   static String _extensionFor(String mimeType, String? originalFileName) {

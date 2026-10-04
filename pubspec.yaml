@@ -44,6 +44,9 @@ dependencies:
   super_clipboard: ^0.9.1
   uuid: ^4.6.0
   sqlite3: ^3.6.0
+  hotkey_manager: ^0.2.3
+  screen_retriever: ^0.2.2
+  window_manager: ^0.5.2
 
 dev_dependencies:
   flutter_test:

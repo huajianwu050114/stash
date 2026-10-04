@@ -4,6 +4,8 @@ import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../features/items/presentation/home_screen.dart';
+import '../features/quick_stash/application/quick_stash_controller.dart';
+import '../features/quick_stash/presentation/quick_stash_screen.dart';
 import 'providers.dart';
 
 class StashApp extends ConsumerWidget {
@@ -12,17 +14,24 @@ class StashApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(appearanceProvider).value ?? ThemeMode.system;
-    return MaterialApp(
-      title: 'Stash',
-      debugShowCheckedModeBanner: false,
-      themeMode: themeMode,
-      theme: _theme(Brightness.light),
-      darkTheme: _theme(Brightness.dark),
-      localizationsDelegates: const [
-        FlutterQuillLocalizations.delegate,
-        ...GlobalMaterialLocalizations.delegates,
-      ],
-      home: const HomeScreen(),
+    final quickStash = ref.watch(quickStashControllerProvider);
+    ref.watch(quickStashSettingsControllerProvider);
+    return ListenableBuilder(
+      listenable: quickStash,
+      builder: (context, _) => MaterialApp(
+        title: 'Stash',
+        debugShowCheckedModeBanner: false,
+        themeMode: themeMode,
+        theme: _theme(Brightness.light),
+        darkTheme: _theme(Brightness.dark),
+        localizationsDelegates: const [
+          FlutterQuillLocalizations.delegate,
+          ...GlobalMaterialLocalizations.delegates,
+        ],
+        home: quickStash.surface == StashSurface.quick
+            ? const QuickStashScreen()
+            : const HomeScreen(),
+      ),
     );
   }
 }

@@ -5,6 +5,7 @@ import '../../../app/providers.dart';
 import '../../channels/domain/channel.dart';
 import '../../channels/presentation/location_picker.dart';
 import '../domain/item.dart';
+import '../../quick_stash/presentation/quick_stash_settings_screen.dart';
 import 'item_detail_screen.dart';
 import 'item_editor_screen.dart';
 
@@ -88,6 +89,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   child: Text('Dark'),
                 ),
               ],
+            ),
+            IconButton(
+              key: const Key('settings-button'),
+              tooltip: 'Settings',
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const QuickStashSettingsScreen(),
+                ),
+              ),
+              icon: const Icon(Icons.settings_outlined),
             ),
             FilledButton.icon(
               key: const Key('new-item-button'),
