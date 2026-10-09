@@ -324,6 +324,87 @@ void main() {
     expect(quickDocument(tester).toPlainText(), 'still here\n');
   });
 
+  testWidgets('blank lower editor surface focuses at the document end', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    enterQuickText(tester, 'abc');
+    await pumpUi(tester);
+    final editor = quickEditor(tester);
+    final surface = find.byKey(const Key('quick-editor-surface'));
+    final editorWidget = find.byKey(const Key('quick-content-field'));
+    expect(
+      tester.getSize(editorWidget).height,
+      greaterThanOrEqualTo(tester.getSize(surface).height - 2),
+    );
+    editor.focusNode.unfocus();
+    await tester.pump();
+    expect(editor.focusNode.hasFocus, isFalse);
+
+    final surfaceRect = tester.getRect(surface);
+    await tester.tapAt(Offset(surfaceRect.center.dx, surfaceRect.bottom - 16));
+    await pumpUi(tester);
+
+    expect(editor.focusNode.hasFocus, isTrue);
+    expect(editor.controller.selection.isCollapsed, isTrue);
+    expect(
+      editor.controller.selection.extentOffset,
+      editor.controller.document.length - 1,
+    );
+  });
+
+  testWidgets('blank surface click preserves draft for continued input', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    enterQuickText(tester, 'abc');
+    await pumpUi(tester);
+    final editor = quickEditor(tester);
+    editor.focusNode.unfocus();
+    await tester.pump();
+
+    final surfaceRect = tester.getRect(
+      find.byKey(const Key('quick-editor-surface')),
+    );
+    await tester.tapAt(Offset(surfaceRect.center.dx, surfaceRect.bottom - 16));
+    await pumpUi(tester);
+    insertQuickTextAtCaret(tester, 'def');
+
+    expect(editor.focusNode.hasFocus, isTrue);
+    expect(quickDocument(tester).toPlainText(), 'abcdef\n');
+  });
+
+  testWidgets('surface listener preserves precise Quill caret clicks', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    enterQuickText(tester, 'hello beautiful world');
+    await pumpUi(tester);
+    final editor = quickEditor(tester);
+    final rawEditor = tester.state<QuillRawEditorState>(
+      find.byType(QuillRawEditor),
+    );
+    final caretRect = rawEditor.renderEditor.getLocalRectForCaret(
+      const TextPosition(offset: 15),
+    );
+    final caretPosition = rawEditor.renderEditor.localToGlobal(
+      caretRect.centerLeft,
+    );
+    editor.controller.updateSelection(
+      const TextSelection.collapsed(offset: 0),
+      ChangeSource.local,
+    );
+    await pumpUi(tester);
+    editor.focusNode.unfocus();
+    await tester.pump();
+
+    await tester.tapAt(caretPosition);
+    await pumpUi(tester);
+
+    expect(editor.focusNode.hasFocus, isTrue);
+    expect(editor.controller.selection.extentOffset, 15);
+  });
+
   testWidgets('Esc discards text and hides without creating an item', (
     tester,
   ) async {

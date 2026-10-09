@@ -408,31 +408,46 @@ class _QuickStashScreenState extends ConsumerState<QuickStashScreen> {
                   ),
                   const SizedBox(height: 12),
                   Expanded(
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        border: Border.all(
-                          color: Theme.of(context).colorScheme.outlineVariant,
-                        ),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: SingleChildScrollView(
-                        padding: const EdgeInsets.symmetric(horizontal: 14),
-                        child: QuillEditor.basic(
-                          key: const Key('quick-content-field'),
-                          controller: _documentController,
-                          focusNode: _documentFocusNode,
-                          scrollController: _documentScrollController,
-                          config: QuillEditorConfig(
-                            scrollable: false,
-                            autoFocus: true,
-                            minHeight: 300,
-                            placeholder: 'Paste or type anything…',
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            showCodeBlockLineNumbers: false,
-                            embedBuilders: [imageBuilder],
-                            // ignore: experimental_member_use
-                            onKeyPressed: (event, _) =>
-                                _handleKey(event, submitMode),
+                    child: LayoutBuilder(
+                      builder: (context, constraints) => Listener(
+                        key: const Key('quick-editor-surface'),
+                        behavior: HitTestBehavior.translucent,
+                        onPointerDown: (_) => _restoreEditorFocus(),
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            border: Border.all(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .outlineVariant,
+                            ),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: SingleChildScrollView(
+                            padding: const EdgeInsets.symmetric(horizontal: 14),
+                            child: ConstrainedBox(
+                              constraints: BoxConstraints(
+                                minHeight: constraints.maxHeight,
+                              ),
+                              child: QuillEditor.basic(
+                                key: const Key('quick-content-field'),
+                                controller: _documentController,
+                                focusNode: _documentFocusNode,
+                                scrollController: _documentScrollController,
+                                config: QuillEditorConfig(
+                                  scrollable: false,
+                                  autoFocus: true,
+                                  placeholder: 'Paste or type anything…',
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 14,
+                                  ),
+                                  showCodeBlockLineNumbers: false,
+                                  embedBuilders: [imageBuilder],
+                                  // ignore: experimental_member_use
+                                  onKeyPressed: (event, _) =>
+                                      _handleKey(event, submitMode),
+                                ),
+                              ),
+                            ),
                           ),
                         ),
                       ),
