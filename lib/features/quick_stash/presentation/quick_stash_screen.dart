@@ -12,6 +12,7 @@ import '../../attachments/data/attachment_repository.dart';
 import '../../attachments/data/image_import_sources.dart';
 import '../../attachments/presentation/stash_image_embed_builder.dart';
 import '../../items/data/item_document_codec.dart';
+import '../application/quick_stash_controller.dart';
 import '../domain/quick_stash_settings.dart';
 
 class QuickStashScreen extends ConsumerStatefulWidget {
@@ -32,10 +33,13 @@ class _QuickStashScreenState extends ConsumerState<QuickStashScreen> {
   late final AttachmentRepository _attachments;
   late final ClipboardReaderGateway _clipboard;
   late final ImagePickerGateway _imagePicker;
+  late final QuickStashController _quickStash;
   final Set<String> _sessionAttachmentIds = {};
+  TextSelection _lastValidSelection = const TextSelection.collapsed(offset: 0);
   bool _saving = false;
   bool _discarding = false;
   bool _focusRestoreScheduled = false;
+  late int _activationGeneration;
   String? _message;
 
   @override
@@ -44,6 +48,9 @@ class _QuickStashScreenState extends ConsumerState<QuickStashScreen> {
     _attachments = ref.read(attachmentRepositoryProvider);
     _clipboard = ref.read(clipboardReaderProvider);
     _imagePicker = ref.read(imagePickerProvider);
+    _quickStash = ref.read(quickStashControllerProvider);
+    _activationGeneration = _quickStash.activationGeneration;
+    _quickStash.addListener(_handleQuickStashActivation);
     _documentFocusNode = FocusNode(debugLabel: 'quick-stash-document');
     _documentScrollController = ScrollController();
     HardwareKeyboard.instance.addHandler(_handleGlobalKey);
@@ -53,6 +60,7 @@ class _QuickStashScreenState extends ConsumerState<QuickStashScreen> {
 
   void _startBlankSession() {
     _itemId = _uuid.v4();
+    _lastValidSelection = const TextSelection.collapsed(offset: 0);
     final document = _codec.fromPlainText('');
     _documentController = QuillController(
       document: document,
@@ -61,7 +69,19 @@ class _QuickStashScreenState extends ConsumerState<QuickStashScreen> {
   }
 
   void _documentChanged() {
+    if (_documentController.selection.isValid) {
+      _lastValidSelection = _clampSelection(_documentController.selection);
+    }
     if (mounted) setState(() => _message = null);
+  }
+
+  void _handleQuickStashActivation() {
+    if (_quickStash.surface != StashSurface.quick ||
+        _activationGeneration == _quickStash.activationGeneration) {
+      return;
+    }
+    _activationGeneration = _quickStash.activationGeneration;
+    _restoreEditorFocus();
   }
 
   @override
@@ -71,6 +91,7 @@ class _QuickStashScreenState extends ConsumerState<QuickStashScreen> {
       ..dispose();
     _documentFocusNode.dispose();
     _documentScrollController.dispose();
+    _quickStash.removeListener(_handleQuickStashActivation);
     HardwareKeyboard.instance.removeHandler(_handleGlobalKey);
     if (_sessionAttachmentIds.isNotEmpty) {
       unawaited(_cleanupStagedBestEffort());
@@ -241,7 +262,7 @@ class _QuickStashScreenState extends ConsumerState<QuickStashScreen> {
       )
       ..moveCursorToPosition(index + 1);
     if (mounted) setState(() {});
-    _restoreEditorFocus();
+    _restoreEditorFocus(_documentController.selection);
   }
 
   void _insertText(String text, {TextSelection? insertionSelection}) {
@@ -256,7 +277,7 @@ class _QuickStashScreenState extends ConsumerState<QuickStashScreen> {
       text,
       TextSelection.collapsed(offset: index + text.length),
     );
-    _restoreEditorFocus();
+    _restoreEditorFocus(_documentController.selection);
   }
 
   TextSelection _clampSelection(TextSelection selection) {
@@ -275,7 +296,7 @@ class _QuickStashScreenState extends ConsumerState<QuickStashScreen> {
     if (!mounted || _focusRestoreScheduled) return;
     _focusRestoreScheduled = true;
     final targetController = _documentController;
-    final requestedSelection = preferredSelection ?? targetController.selection;
+    final requestedSelection = preferredSelection;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _focusRestoreScheduled = false;
       if (!mounted ||
@@ -284,10 +305,14 @@ class _QuickStashScreenState extends ConsumerState<QuickStashScreen> {
         return;
       }
       final currentSelection = targetController.selection;
-      final restoredSelection = _clampSelection(requestedSelection);
+      final restoredSelection = _clampSelection(
+        requestedSelection ??
+            (currentSelection.isValid ? currentSelection : _lastValidSelection),
+      );
       if (restoredSelection != currentSelection) {
         targetController.updateSelection(restoredSelection, ChangeSource.local);
       }
+      _lastValidSelection = restoredSelection;
       _documentFocusNode.requestFocus();
     });
   }

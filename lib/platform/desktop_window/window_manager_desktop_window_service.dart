@@ -6,9 +6,14 @@ import 'package:window_manager/window_manager.dart';
 
 import 'desktop_window_service.dart';
 
-class WindowManagerDesktopWindowService implements DesktopWindowService {
+class WindowManagerDesktopWindowService
+    with WindowListener
+    implements DesktopWindowService {
   static const double quickWidth = 420;
   static const Size fullSize = Size(1100, 760);
+
+  final Set<WindowFocusListener> _focusListeners = {};
+  bool _listening = false;
 
   @override
   bool get isSupported => true;
@@ -16,6 +21,10 @@ class WindowManagerDesktopWindowService implements DesktopWindowService {
   @override
   Future<void> initialize() async {
     await windowManager.ensureInitialized();
+    if (!_listening) {
+      windowManager.addListener(this);
+      _listening = true;
+    }
     unawaited(
       windowManager.waitUntilReadyToShow(
         const WindowOptions(
@@ -35,6 +44,28 @@ class WindowManagerDesktopWindowService implements DesktopWindowService {
 
   @override
   Future<bool> isVisible() => windowManager.isVisible();
+
+  @override
+  Future<bool> isFocused() => windowManager.isFocused();
+
+  @override
+  Future<void> focus() => windowManager.focus();
+
+  @override
+  void addFocusListener(WindowFocusListener listener) {
+    _focusListeners.add(listener);
+  }
+
+  @override
+  void removeFocusListener(WindowFocusListener listener) {
+    _focusListeners.remove(listener);
+  }
+
+  @override
+  void onWindowFocus() => _notifyFocusListeners(true);
+
+  @override
+  void onWindowBlur() => _notifyFocusListeners(false);
 
   @override
   Future<void> showQuick() async {
@@ -84,5 +115,11 @@ class WindowManagerDesktopWindowService implements DesktopWindowService {
       if ((origin & size).contains(cursor)) return display;
     }
     return screenRetriever.getPrimaryDisplay();
+  }
+
+  void _notifyFocusListeners(bool isFocused) {
+    for (final listener in Set<WindowFocusListener>.of(_focusListeners)) {
+      listener(isFocused);
+    }
   }
 }

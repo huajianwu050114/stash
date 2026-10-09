@@ -251,6 +251,79 @@ void main() {
     expect(window.hideCalls, 1);
   });
 
+  testWidgets('window blur preserves the Quick Stash draft', (tester) async {
+    await pumpApp(tester);
+    enterQuickText(tester, 'keep this draft');
+    final editor = quickEditor(tester);
+    editor.controller.updateSelection(
+      const TextSelection.collapsed(offset: 5),
+      ChangeSource.local,
+    );
+
+    editor.focusNode.unfocus();
+    window.emitFocus(false);
+    await pumpUi(tester);
+
+    expect(quickDocument(tester).toPlainText(), 'keep this draft\n');
+    expect(
+      editor.controller.selection,
+      const TextSelection.collapsed(offset: 5),
+    );
+    expect(await db.select(db.items).get(), isEmpty);
+  });
+
+  testWidgets('window focus event restores editor focus and caret', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    enterQuickText(tester, 'hello world');
+    final editor = quickEditor(tester);
+    editor.controller.updateSelection(
+      const TextSelection.collapsed(offset: 5),
+      ChangeSource.local,
+    );
+    editor.focusNode.unfocus();
+    window.emitFocus(false);
+    await pumpUi(tester);
+    editor.focusNode.unfocus();
+    await tester.pump();
+    expect(editor.focusNode.hasFocus, isFalse);
+
+    window.emitFocus(true);
+    await pumpUi(tester);
+
+    expect(editor.focusNode.hasFocus, isTrue);
+    expect(
+      editor.controller.selection,
+      const TextSelection.collapsed(offset: 5),
+    );
+    insertQuickTextAtCaret(tester, '!');
+    await pressKey(tester, LogicalKeyboardKey.enter);
+    expect((await db.select(db.items).get()).single.content, 'hello! world');
+  });
+
+  testWidgets('hotkey-style toggle focuses visible unfocused Quick Stash', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    enterQuickText(tester, 'still here');
+    final editor = quickEditor(tester);
+    editor.focusNode.unfocus();
+    window.emitFocus(false);
+    await pumpUi(tester);
+    editor.focusNode.unfocus();
+    await tester.pump();
+    expect(editor.focusNode.hasFocus, isFalse);
+
+    await quickStash.toggleQuick();
+    await pumpUi(tester);
+
+    expect(window.focusCalls, 1);
+    expect(window.hideCalls, 0);
+    expect(editor.focusNode.hasFocus, isTrue);
+    expect(quickDocument(tester).toPlainText(), 'still here\n');
+  });
+
   testWidgets('Esc discards text and hides without creating an item', (
     tester,
   ) async {
@@ -440,7 +513,10 @@ Future<void> _deleteDirectoryWithRetry(Directory directory) async {
 }
 
 class _FakeWindow implements DesktopWindowService {
+  final Set<WindowFocusListener> _focusListeners = {};
   bool visible = true;
+  bool focused = true;
+  int focusCalls = 0;
   int hideCalls = 0;
   int showFullCalls = 0;
 
@@ -454,18 +530,53 @@ class _FakeWindow implements DesktopWindowService {
   Future<bool> isVisible() async => visible;
 
   @override
-  Future<void> showQuick() async => visible = true;
+  Future<bool> isFocused() async => focused;
+
+  @override
+  Future<void> focus() async {
+    focusCalls++;
+    focused = true;
+    emitFocus(true);
+  }
+
+  @override
+  Future<void> showQuick() async {
+    visible = true;
+    focused = true;
+    emitFocus(true);
+  }
 
   @override
   Future<void> hideQuick() async {
     visible = false;
+    focused = false;
     hideCalls++;
+    emitFocus(false);
   }
 
   @override
   Future<void> showFull() async {
     visible = true;
+    focused = true;
     showFullCalls++;
+    emitFocus(true);
+  }
+
+  @override
+  void addFocusListener(WindowFocusListener listener) {
+    _focusListeners.add(listener);
+  }
+
+  @override
+  void removeFocusListener(WindowFocusListener listener) {
+    _focusListeners.remove(listener);
+  }
+
+  void emitFocus(bool isFocused) {
+    focused = isFocused;
+    for (final listener in Set<WindowFocusListener>.of(_focusListeners)) {
+      listener(isFocused);
+    }
   }
 }
 

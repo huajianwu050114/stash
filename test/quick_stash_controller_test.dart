@@ -3,36 +3,81 @@ import 'package:stash/features/quick_stash/application/quick_stash_controller.da
 import 'package:stash/platform/desktop_window/desktop_window_service.dart';
 
 void main() {
+  test('visible focused Quick Stash hides on toggle', () async {
+    final window = _FakeWindow();
+    final controller = QuickStashController(window);
+    await controller.showQuick();
+    window.calls.clear();
+
+    await controller.toggleQuick();
+
+    expect(window.calls, ['isVisible', 'isFocused', 'hideQuick']);
+    expect(window.visible, isFalse);
+  });
+
+  test('visible unfocused Quick Stash focuses instead of hiding', () async {
+    final window = _FakeWindow();
+    final controller = QuickStashController(window);
+    await controller.showQuick();
+    window
+      ..focused = false
+      ..calls.clear();
+    final generation = controller.activationGeneration;
+
+    await controller.toggleQuick();
+
+    expect(window.calls, ['isVisible', 'isFocused', 'focus']);
+    expect(window.visible, isTrue);
+    expect(window.focused, isTrue);
+    expect(controller.activationGeneration, generation + 1);
+  });
+
+  test('hidden Quick Stash shows and focuses on toggle', () async {
+    final window = _FakeWindow();
+    final controller = QuickStashController(window);
+    await controller.showQuick();
+    window
+      ..visible = false
+      ..focused = false
+      ..calls.clear();
+
+    await controller.toggleQuick();
+
+    expect(window.calls, ['isVisible', 'showQuick']);
+    expect(window.visible, isTrue);
+    expect(window.focused, isTrue);
+  });
+
   test(
-    'window controller shows, toggles, hides, and restores full mode',
+    'only a Quick-surface focus event requests editor reactivation',
     () async {
       final window = _FakeWindow();
       final controller = QuickStashController(window);
 
+      window.emitFocus(false);
+      window.emitFocus(true);
+      expect(controller.activationGeneration, 0);
+
       await controller.showQuick();
-      expect(controller.surface, StashSurface.quick);
-      expect(window.calls, ['showQuick']);
+      final generation = controller.activationGeneration;
+      window.emitFocus(false);
+      expect(controller.activationGeneration, generation);
 
-      await controller.toggleQuick();
-      expect(window.calls, ['showQuick', 'isVisible', 'hideQuick']);
-
-      window.visible = false;
-      await controller.toggleQuick();
-      expect(window.calls.last, 'showQuick');
-
-      await controller.hideQuick();
-      expect(window.calls.last, 'hideQuick');
+      window.emitFocus(true);
+      expect(controller.activationGeneration, generation + 1);
 
       await controller.showFull();
-      expect(controller.surface, StashSurface.full);
-      expect(window.calls.last, 'showFull');
+      window.emitFocus(true);
+      expect(controller.activationGeneration, generation + 1);
     },
   );
 }
 
 class _FakeWindow implements DesktopWindowService {
   final List<String> calls = [];
+  final Set<WindowFocusListener> _focusListeners = {};
   bool visible = true;
+  bool focused = true;
 
   @override
   bool get isSupported => true;
@@ -47,17 +92,56 @@ class _FakeWindow implements DesktopWindowService {
   }
 
   @override
+  Future<bool> isFocused() async {
+    calls.add('isFocused');
+    return focused;
+  }
+
+  @override
+  Future<void> focus() async {
+    calls.add('focus');
+    focused = true;
+    emitFocus(true);
+  }
+
+  @override
   Future<void> showQuick() async {
-    visible = true;
     calls.add('showQuick');
+    visible = true;
+    focused = true;
+    emitFocus(true);
   }
 
   @override
   Future<void> hideQuick() async {
-    visible = false;
     calls.add('hideQuick');
+    visible = false;
+    focused = false;
+    emitFocus(false);
   }
 
   @override
-  Future<void> showFull() async => calls.add('showFull');
+  Future<void> showFull() async {
+    calls.add('showFull');
+    visible = true;
+    focused = true;
+    emitFocus(true);
+  }
+
+  @override
+  void addFocusListener(WindowFocusListener listener) {
+    _focusListeners.add(listener);
+  }
+
+  @override
+  void removeFocusListener(WindowFocusListener listener) {
+    _focusListeners.remove(listener);
+  }
+
+  void emitFocus(bool isFocused) {
+    focused = isFocused;
+    for (final listener in Set<WindowFocusListener>.of(_focusListeners)) {
+      listener(isFocused);
+    }
+  }
 }
