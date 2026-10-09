@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -34,6 +35,7 @@ class _QuickStashScreenState extends ConsumerState<QuickStashScreen> {
   final Set<String> _sessionAttachmentIds = {};
   bool _saving = false;
   bool _discarding = false;
+  bool _focusRestoreScheduled = false;
   String? _message;
 
   @override
@@ -46,9 +48,7 @@ class _QuickStashScreenState extends ConsumerState<QuickStashScreen> {
     _documentScrollController = ScrollController();
     HardwareKeyboard.instance.addHandler(_handleGlobalKey);
     _startBlankSession();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _documentFocusNode.requestFocus();
-    });
+    _restoreEditorFocus();
   }
 
   void _startBlankSession() {
@@ -184,29 +184,42 @@ class _QuickStashScreenState extends ConsumerState<QuickStashScreen> {
   }
 
   Future<void> _insertPickedImage() async {
+    final insertionSelection = _documentController.selection;
     try {
       final image = await _imagePicker.pickImage();
-      if (image != null) await _importAndInsert(image);
+      if (image != null) {
+        await _importAndInsert(image, insertionSelection: insertionSelection);
+      }
     } catch (_) {
       if (mounted) setState(() => _message = 'Could not insert this image.');
+    } finally {
+      _restoreEditorFocus(insertionSelection);
     }
   }
 
   Future<void> _paste() async {
+    final insertionSelection = _documentController.selection;
     try {
       final image = await _clipboard.readImage();
       if (image != null) {
-        await _importAndInsert(image);
+        await _importAndInsert(image, insertionSelection: insertionSelection);
         return;
       }
       final text = await _clipboard.readPlainText();
-      if (text != null && text.isNotEmpty) _insertText(text);
+      if (text != null && text.isNotEmpty) {
+        _insertText(text, insertionSelection: insertionSelection);
+      }
     } catch (_) {
       if (mounted) setState(() => _message = 'Could not paste from clipboard.');
+    } finally {
+      _restoreEditorFocus(insertionSelection);
     }
   }
 
-  Future<void> _importAndInsert(ImportedImageData image) async {
+  Future<void> _importAndInsert(
+    ImportedImageData image, {
+    TextSelection? insertionSelection,
+  }) async {
     final attachment = await _attachments.importImage(
       itemId: _itemId,
       bytes: image.bytes,
@@ -214,9 +227,11 @@ class _QuickStashScreenState extends ConsumerState<QuickStashScreen> {
       originalFileName: image.fileName,
     );
     _sessionAttachmentIds.add(attachment.id);
-    final selection = _documentController.selection;
-    final index = selection.start < 0 ? 0 : selection.start;
-    final length = selection.end < 0 ? 0 : selection.end - index;
+    final selection = _clampSelection(
+      insertionSelection ?? _documentController.selection,
+    );
+    final index = selection.start;
+    final length = selection.end - index;
     _documentController
       ..replaceText(
         index,
@@ -226,18 +241,55 @@ class _QuickStashScreenState extends ConsumerState<QuickStashScreen> {
       )
       ..moveCursorToPosition(index + 1);
     if (mounted) setState(() {});
+    _restoreEditorFocus();
   }
 
-  void _insertText(String text) {
-    final selection = _documentController.selection;
-    final index = selection.start < 0 ? 0 : selection.start;
-    final length = selection.end < 0 ? 0 : selection.end - index;
+  void _insertText(String text, {TextSelection? insertionSelection}) {
+    final selection = _clampSelection(
+      insertionSelection ?? _documentController.selection,
+    );
+    final index = selection.start;
+    final length = selection.end - index;
     _documentController.replaceText(
       index,
       length,
       text,
       TextSelection.collapsed(offset: index + text.length),
     );
+    _restoreEditorFocus();
+  }
+
+  TextSelection _clampSelection(TextSelection selection) {
+    final maxOffset = math.max(0, _documentController.document.length - 1);
+    int safeOffset(int offset) =>
+        offset < 0 ? maxOffset : offset.clamp(0, maxOffset).toInt();
+    return TextSelection(
+      baseOffset: safeOffset(selection.baseOffset),
+      extentOffset: safeOffset(selection.extentOffset),
+      affinity: selection.affinity,
+      isDirectional: selection.isDirectional,
+    );
+  }
+
+  void _restoreEditorFocus([TextSelection? preferredSelection]) {
+    if (!mounted || _focusRestoreScheduled) return;
+    _focusRestoreScheduled = true;
+    final targetController = _documentController;
+    final requestedSelection = preferredSelection ?? targetController.selection;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _focusRestoreScheduled = false;
+      if (!mounted ||
+          !identical(targetController, _documentController) ||
+          !_documentFocusNode.canRequestFocus) {
+        return;
+      }
+      final currentSelection = targetController.selection;
+      final restoredSelection = _clampSelection(requestedSelection);
+      if (restoredSelection != currentSelection) {
+        targetController.updateSelection(restoredSelection, ChangeSource.local);
+      }
+      _documentFocusNode.requestFocus();
+    });
   }
 
   void _afterCurrentKey(Future<void> Function() action) {

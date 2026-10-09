@@ -147,6 +147,110 @@ void main() {
     expect(window.hideCalls, 1);
   });
 
+  testWidgets('text paste restores focus and Enter submits without repair', (
+    tester,
+  ) async {
+    clipboard
+      ..text = ' world'
+      ..dropFocusOnRead = true;
+    await pumpApp(tester);
+    enterQuickText(tester, 'hello');
+    final editor = quickEditor(tester);
+    clipboard.onFocusDropped = () => editor.controller.updateSelection(
+      const TextSelection.collapsed(offset: 0),
+      ChangeSource.local,
+    );
+    expect(editor.focusNode.hasFocus, isTrue);
+
+    await pressKey(tester, LogicalKeyboardKey.keyV, control: true);
+
+    expect(editor.focusNode.hasFocus, isTrue);
+    insertQuickTextAtCaret(tester, '!');
+    await pumpUi(tester);
+    expect(quickDocument(tester).toPlainText(), 'hello world!\n');
+
+    await pressKey(tester, LogicalKeyboardKey.enter);
+
+    expect((await db.select(db.items).get()).single.content, 'hello world!');
+    expect(window.hideCalls, 1);
+  });
+
+  testWidgets('image paste restores focus and preserves the embed caret', (
+    tester,
+  ) async {
+    clipboard
+      ..image = imageData('clipboard.png')
+      ..dropFocusOnRead = true;
+    await pumpApp(tester);
+    enterQuickText(tester, 'before');
+    final editor = quickEditor(tester);
+    clipboard.onFocusDropped = () => editor.controller.updateSelection(
+      const TextSelection.collapsed(offset: 0),
+      ChangeSource.local,
+    );
+
+    await pressKey(tester, LogicalKeyboardKey.keyV, control: true);
+    await waitForAttachmentImport(tester, db);
+
+    final attachment = await db.select(db.attachments).getSingle();
+    expect(editor.focusNode.hasFocus, isTrue);
+    expect(
+      editor.controller.selection,
+      const TextSelection.collapsed(offset: 7),
+    );
+    insertQuickTextAtCaret(tester, 'caption');
+
+    await pressKey(tester, LogicalKeyboardKey.enter);
+
+    final item = await db.select(db.items).getSingle();
+    expect(item.content, 'beforecaption');
+    expect(item.documentJson, contains(attachment.id));
+    expect(window.hideCalls, 1);
+  });
+
+  testWidgets('image picker restores editor focus after its async boundary', (
+    tester,
+  ) async {
+    picker
+      ..image = imageData('picker.png')
+      ..dropFocusOnPick = true;
+    await pumpApp(tester);
+    enterQuickText(tester, 'before');
+    final editor = quickEditor(tester);
+    picker.onFocusDropped = () => editor.controller.updateSelection(
+      const TextSelection.collapsed(offset: 0),
+      ChangeSource.local,
+    );
+
+    await tapInsertImage(tester);
+
+    expect(editor.focusNode.hasFocus, isTrue);
+    expect(
+      editor.controller.selection,
+      const TextSelection.collapsed(offset: 7),
+    );
+  });
+
+  testWidgets('Shift+Enter keeps focus for subsequent input and submit', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    enterQuickText(tester, 'line one');
+
+    await pressKey(tester, LogicalKeyboardKey.enter, shift: true);
+
+    expect(quickEditor(tester).focusNode.hasFocus, isTrue);
+    insertQuickTextAtCaret(tester, 'line two');
+    await pumpUi(tester);
+    await pressKey(tester, LogicalKeyboardKey.enter);
+
+    expect(
+      (await db.select(db.items).get()).single.content,
+      'line one\nline two',
+    );
+    expect(window.hideCalls, 1);
+  });
+
   testWidgets('Esc discards text and hides without creating an item', (
     tester,
   ) async {
@@ -239,17 +343,26 @@ Document quickDocument(WidgetTester tester) => tester
     .controller
     .document;
 
+QuillEditor quickEditor(WidgetTester tester) =>
+    tester.widget<QuillEditor>(find.byKey(const Key('quick-content-field')));
+
+void insertQuickTextAtCaret(WidgetTester tester, String text) {
+  final controller = quickEditor(tester).controller;
+  final offset = controller.selection.extentOffset;
+  controller.replaceText(
+    offset,
+    0,
+    text,
+    TextSelection.collapsed(offset: offset + text.length),
+  );
+}
+
 Future<void> pressKey(
   WidgetTester tester,
   LogicalKeyboardKey key, {
   bool shift = false,
   bool control = false,
 }) async {
-  final editor = tester.widget<QuillEditor>(
-    find.byKey(const Key('quick-content-field')),
-  );
-  editor.focusNode.requestFocus();
-  await tester.pump();
   if (shift) await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
   if (control) await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
   await tester.sendKeyEvent(key);
@@ -274,6 +387,19 @@ Future<void> waitForAttachmentCleanup(
 ) async {
   for (var attempt = 0; attempt < 20; attempt++) {
     if ((await db.select(db.attachments).get()).isEmpty) return;
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 25)),
+    );
+    await tester.pump(const Duration(milliseconds: 50));
+  }
+}
+
+Future<void> waitForAttachmentImport(
+  WidgetTester tester,
+  AppDatabase db,
+) async {
+  for (var attempt = 0; attempt < 20; attempt++) {
+    if ((await db.select(db.attachments).get()).isNotEmpty) return;
     await tester.runAsync(
       () => Future<void>.delayed(const Duration(milliseconds: 25)),
     );
@@ -357,20 +483,45 @@ class _MemoryStore implements QuickStashPreferenceStore {
 
 class _FakeImagePicker implements ImagePickerGateway {
   ImportedImageData? image;
+  bool dropFocusOnPick = false;
+  void Function()? onFocusDropped;
 
   @override
-  Future<ImportedImageData?> pickImage() async => image;
+  Future<ImportedImageData?> pickImage() async {
+    if (dropFocusOnPick) {
+      FocusManager.instance.primaryFocus?.unfocus();
+      onFocusDropped?.call();
+    }
+    await Future<void>.delayed(Duration.zero);
+    return image;
+  }
 }
 
 class _FakeClipboard implements ClipboardReaderGateway {
   ImportedImageData? image;
   String? text;
+  bool dropFocusOnRead = false;
+  void Function()? onFocusDropped;
 
   @override
-  Future<ImportedImageData?> readImage() async => image;
+  Future<ImportedImageData?> readImage() async {
+    if (dropFocusOnRead) {
+      FocusManager.instance.primaryFocus?.unfocus();
+      onFocusDropped?.call();
+    }
+    await Future<void>.delayed(Duration.zero);
+    return image;
+  }
 
   @override
-  Future<String?> readPlainText() async => text;
+  Future<String?> readPlainText() async {
+    if (dropFocusOnRead) {
+      FocusManager.instance.primaryFocus?.unfocus();
+      onFocusDropped?.call();
+    }
+    await Future<void>.delayed(Duration.zero);
+    return text;
+  }
 }
 
 class _MemoryAppearancePreferences implements AppearancePreferences {
