@@ -88,6 +88,7 @@ void main() {
     );
     await pumpUi(tester);
     expect(find.byKey(const Key('quick-content-field')), findsOneWidget);
+    expect(find.byKey(const Key('quick-image-drop-region')), findsOneWidget);
   }
 
   testWidgets('text plus Enter saves exactly one item and resets session', (

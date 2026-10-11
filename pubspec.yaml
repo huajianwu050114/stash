@@ -42,6 +42,7 @@ dependencies:
   path: ^1.9.1
   shared_preferences: ^2.5.5
   super_clipboard: ^0.9.1
+  super_drag_and_drop: ^0.9.1
   uuid: ^4.6.0
   sqlite3: ^3.6.0
   hotkey_manager: ^0.2.3

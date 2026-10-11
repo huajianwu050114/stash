@@ -5,6 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as path;
 import 'package:stash/core/database/app_database.dart';
 import 'package:stash/features/attachments/data/attachment_repository.dart';
+import 'package:stash/features/attachments/data/image_attachment_ingestor.dart';
+import 'package:stash/features/attachments/data/image_import_sources.dart';
 import 'package:stash/features/items/data/item_repository.dart';
 
 import 'test_database.dart';
@@ -67,6 +69,57 @@ void main() {
     await attachments.cleanupStagedAttachments([attachment.id]);
 
     expect(await file!.exists(), isFalse);
+    expect(await db.select(db.attachments).get(), isEmpty);
+  });
+
+  test('image ingestor imports multiple dropped images in order', () async {
+    final ingestor = ImageAttachmentIngestor(attachments);
+    final imported = await ingestor.importImages(
+      itemId: 'future-item',
+      images: [
+        ImportedImageData(
+          bytes: Uint8List.fromList([1, 2]),
+          mimeType: 'image/png',
+          fileName: 'first.png',
+        ),
+        ImportedImageData(
+          bytes: Uint8List.fromList([3, 4]),
+          mimeType: 'image/jpeg',
+          fileName: 'second.jpg',
+        ),
+      ],
+    );
+
+    expect(imported, hasLength(2));
+    expect(imported.map((value) => value.originalFileName), [
+      'first.png',
+      'second.jpg',
+    ]);
+    expect(await db.select(db.attachments).get(), hasLength(2));
+  });
+
+  test('image ingestor rolls back a partially failed batch', () async {
+    final ingestor = ImageAttachmentIngestor(attachments);
+
+    await expectLater(
+      ingestor.importImages(
+        itemId: 'future-item',
+        images: [
+          ImportedImageData(
+            bytes: Uint8List.fromList([1]),
+            mimeType: 'image/png',
+            fileName: 'first.png',
+          ),
+          ImportedImageData(
+            bytes: Uint8List.fromList([2]),
+            mimeType: 'application/octet-stream',
+            fileName: 'not-an-image.txt',
+          ),
+        ],
+      ),
+      throwsArgumentError,
+    );
+
     expect(await db.select(db.attachments).get(), isEmpty);
   });
 

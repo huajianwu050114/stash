@@ -9,7 +9,9 @@ import 'package:uuid/uuid.dart';
 
 import '../../../app/providers.dart';
 import '../../attachments/data/attachment_repository.dart';
+import '../../attachments/data/image_attachment_ingestor.dart';
 import '../../attachments/data/image_import_sources.dart';
+import '../../attachments/presentation/image_drop_region.dart';
 import '../../attachments/presentation/stash_image_embed_builder.dart';
 import '../../items/data/item_document_codec.dart';
 import '../application/quick_stash_controller.dart';
@@ -31,6 +33,7 @@ class _QuickStashScreenState extends ConsumerState<QuickStashScreen> {
   late final FocusNode _documentFocusNode;
   late final ScrollController _documentScrollController;
   late final AttachmentRepository _attachments;
+  late final ImageAttachmentIngestor _imageIngestor;
   late final ClipboardReaderGateway _clipboard;
   late final ImagePickerGateway _imagePicker;
   late final QuickStashController _quickStash;
@@ -46,6 +49,7 @@ class _QuickStashScreenState extends ConsumerState<QuickStashScreen> {
   void initState() {
     super.initState();
     _attachments = ref.read(attachmentRepositoryProvider);
+    _imageIngestor = ImageAttachmentIngestor(_attachments);
     _clipboard = ref.read(clipboardReaderProvider);
     _imagePicker = ref.read(imagePickerProvider);
     _quickStash = ref.read(quickStashControllerProvider);
@@ -209,7 +213,9 @@ class _QuickStashScreenState extends ConsumerState<QuickStashScreen> {
     try {
       final image = await _imagePicker.pickImage();
       if (image != null) {
-        await _importAndInsert(image, insertionSelection: insertionSelection);
+        await _importAndInsertImages([
+          image,
+        ], insertionSelection: insertionSelection);
       }
     } catch (_) {
       if (mounted) setState(() => _message = 'Could not insert this image.');
@@ -223,7 +229,9 @@ class _QuickStashScreenState extends ConsumerState<QuickStashScreen> {
     try {
       final image = await _clipboard.readImage();
       if (image != null) {
-        await _importAndInsert(image, insertionSelection: insertionSelection);
+        await _importAndInsertImages([
+          image,
+        ], insertionSelection: insertionSelection);
         return;
       }
       final text = await _clipboard.readPlainText();
@@ -237,32 +245,42 @@ class _QuickStashScreenState extends ConsumerState<QuickStashScreen> {
     }
   }
 
-  Future<void> _importAndInsert(
-    ImportedImageData image, {
+  Future<void> _importAndInsertImages(
+    List<ImportedImageData> images, {
     TextSelection? insertionSelection,
   }) async {
-    final attachment = await _attachments.importImage(
+    final imported = await _imageIngestor.importImages(
       itemId: _itemId,
-      bytes: image.bytes,
-      mimeType: image.mimeType,
-      originalFileName: image.fileName,
+      images: images,
     );
-    _sessionAttachmentIds.add(attachment.id);
+    _sessionAttachmentIds.addAll(imported.map((attachment) => attachment.id));
     final selection = _clampSelection(
       insertionSelection ?? _documentController.selection,
     );
-    final index = selection.start;
-    final length = selection.end - index;
-    _documentController
-      ..replaceText(
+    var index = selection.start;
+    var length = selection.end - index;
+    for (final attachment in imported) {
+      _documentController.replaceText(
         index,
         length,
         BlockEmbed.custom(StashImageEmbed(attachment.id)),
         null,
-      )
-      ..moveCursorToPosition(index + 1);
+      );
+      index++;
+      length = 0;
+    }
+    _documentController.moveCursorToPosition(index);
     if (mounted) setState(() {});
     _restoreEditorFocus(_documentController.selection);
+  }
+
+  Future<void> _handleDroppedImages(List<ImportedImageData> images) async {
+    final selection = _documentController.selection;
+    await _importAndInsertImages(images, insertionSelection: selection);
+  }
+
+  void _showDropError() {
+    if (mounted) setState(() => _message = 'Could not import dropped image.');
   }
 
   void _insertText(String text, {TextSelection? insertionSelection}) {
@@ -409,42 +427,49 @@ class _QuickStashScreenState extends ConsumerState<QuickStashScreen> {
                   const SizedBox(height: 12),
                   Expanded(
                     child: LayoutBuilder(
-                      builder: (context, constraints) => Listener(
-                        key: const Key('quick-editor-surface'),
-                        behavior: HitTestBehavior.translucent,
-                        onPointerDown: (_) => _restoreEditorFocus(),
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            border: Border.all(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .outlineVariant,
-                            ),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: SingleChildScrollView(
-                            padding: const EdgeInsets.symmetric(horizontal: 14),
-                            child: ConstrainedBox(
-                              constraints: BoxConstraints(
-                                minHeight: constraints.maxHeight,
+                      builder: (context, constraints) => ImageDropRegion(
+                        key: const Key('quick-image-drop-region'),
+                        onImagesDropped: _handleDroppedImages,
+                        onError: _showDropError,
+                        child: Listener(
+                          key: const Key('quick-editor-surface'),
+                          behavior: HitTestBehavior.translucent,
+                          onPointerDown: (_) => _restoreEditorFocus(),
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              border: Border.all(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .outlineVariant,
                               ),
-                              child: QuillEditor.basic(
-                                key: const Key('quick-content-field'),
-                                controller: _documentController,
-                                focusNode: _documentFocusNode,
-                                scrollController: _documentScrollController,
-                                config: QuillEditorConfig(
-                                  scrollable: false,
-                                  autoFocus: true,
-                                  placeholder: 'Paste or type anything…',
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 14,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: SingleChildScrollView(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                              ),
+                              child: ConstrainedBox(
+                                constraints: BoxConstraints(
+                                  minHeight: constraints.maxHeight,
+                                ),
+                                child: QuillEditor.basic(
+                                  key: const Key('quick-content-field'),
+                                  controller: _documentController,
+                                  focusNode: _documentFocusNode,
+                                  scrollController: _documentScrollController,
+                                  config: QuillEditorConfig(
+                                    scrollable: false,
+                                    autoFocus: true,
+                                    placeholder: 'Paste or type anything…',
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 14,
+                                    ),
+                                    showCodeBlockLineNumbers: false,
+                                    embedBuilders: [imageBuilder],
+                                    // ignore: experimental_member_use
+                                    onKeyPressed: (event, _) =>
+                                        _handleKey(event, submitMode),
                                   ),
-                                  showCodeBlockLineNumbers: false,
-                                  embedBuilders: [imageBuilder],
-                                  // ignore: experimental_member_use
-                                  onKeyPressed: (event, _) =>
-                                      _handleKey(event, submitMode),
                                 ),
                               ),
                             ),

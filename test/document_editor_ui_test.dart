@@ -82,6 +82,10 @@ void main() {
 
     expect(find.byKey(const Key('title-field')), findsOneWidget);
     expect(find.byKey(const Key('content-field')), findsOneWidget);
+    expect(
+      find.byKey(const Key('full-editor-image-drop-region')),
+      findsOneWidget,
+    );
     expect(find.byKey(const Key('details-section')), findsOneWidget);
     expect(find.byKey(const Key('note-field')), findsNothing);
     expect(find.byType(QuillSimpleToolbar), findsNothing);

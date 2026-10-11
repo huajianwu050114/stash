@@ -9,7 +9,9 @@ import 'package:uuid/uuid.dart';
 
 import '../../../app/providers.dart';
 import '../../attachments/data/attachment_repository.dart';
+import '../../attachments/data/image_attachment_ingestor.dart';
 import '../../attachments/data/image_import_sources.dart';
+import '../../attachments/presentation/image_drop_region.dart';
 import '../../attachments/presentation/stash_image_embed_builder.dart';
 import '../data/item_document_codec.dart';
 import '../data/item_repository.dart';
@@ -40,6 +42,7 @@ class _ItemEditorScreenState extends ConsumerState<ItemEditorScreen> {
   late final TextEditingController _noteController;
   late final TextEditingController _tagsController;
   late final AttachmentRepository _attachments;
+  late final ImageAttachmentIngestor _imageIngestor;
   late final ClipboardReaderGateway _clipboard;
   late final ImagePickerGateway _imagePicker;
   final Set<String> _sessionAttachmentIds = {};
@@ -55,6 +58,7 @@ class _ItemEditorScreenState extends ConsumerState<ItemEditorScreen> {
     final item = widget.item;
     _itemId = item?.id ?? _uuid.v4();
     _attachments = ref.read(attachmentRepositoryProvider);
+    _imageIngestor = ImageAttachmentIngestor(_attachments);
     _clipboard = ref.read(clipboardReaderProvider);
     _imagePicker = ref.read(imagePickerProvider);
     final document = _codec.decode(
@@ -161,7 +165,7 @@ class _ItemEditorScreenState extends ConsumerState<ItemEditorScreen> {
   Future<void> _insertPickedImage() async {
     try {
       final image = await _imagePicker.pickImage();
-      if (image != null) await _importAndInsert(image);
+      if (image != null) await _importAndInsertImages([image]);
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -198,7 +202,7 @@ class _ItemEditorScreenState extends ConsumerState<ItemEditorScreen> {
     try {
       final image = await _clipboard.readImage();
       if (image != null) {
-        await _importAndInsert(image);
+        await _importAndInsertImages([image]);
         return;
       }
       final text = await _clipboard.readPlainText();
@@ -212,26 +216,34 @@ class _ItemEditorScreenState extends ConsumerState<ItemEditorScreen> {
     }
   }
 
-  Future<void> _importAndInsert(ImportedImageData image) async {
-    final attachment = await _attachments.importImage(
+  Future<void> _importAndInsertImages(List<ImportedImageData> images) async {
+    final imported = await _imageIngestor.importImages(
       itemId: _itemId,
-      bytes: image.bytes,
-      mimeType: image.mimeType,
-      originalFileName: image.fileName,
+      images: images,
     );
-    _sessionAttachmentIds.add(attachment.id);
+    _sessionAttachmentIds.addAll(imported.map((attachment) => attachment.id));
     final selection = _documentController.selection;
-    final index = selection.start < 0 ? 0 : selection.start;
-    final length = selection.end < 0 ? 0 : selection.end - index;
-    _documentController
-      ..replaceText(
+    var index = selection.start < 0 ? 0 : selection.start;
+    var length = selection.end < 0 ? 0 : selection.end - index;
+    for (final attachment in imported) {
+      _documentController.replaceText(
         index,
         length,
         BlockEmbed.custom(StashImageEmbed(attachment.id)),
         null,
-      )
-      ..moveCursorToPosition(index + 1);
+      );
+      index++;
+      length = 0;
+    }
+    _documentController.moveCursorToPosition(index);
     if (mounted) setState(() {});
+  }
+
+  void _showDropError() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Could not import dropped image.')),
+    );
   }
 
   void _insertText(String text) {
@@ -357,31 +369,36 @@ class _ItemEditorScreenState extends ConsumerState<ItemEditorScreen> {
                         showDirection: false,
                       ),
                     ),
-                  QuillEditor.basic(
-                    key: const Key('content-field'),
-                    controller: _documentController,
-                    config: QuillEditorConfig(
-                      scrollable: false,
-                      autoFocus: !widget.isEditing,
-                      minHeight: 320,
-                      placeholder: 'Start typing or paste anything…',
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      showCodeBlockLineNumbers: false,
-                      embedBuilders: [imageBuilder],
-                    // Flutter Quill 11.6 exposes this hook as experimental,
-                    // but it is its supported boundary for overriding Ctrl+V.
-                    // ignore: experimental_member_use
-                      onKeyPressed: (event, _) {
-                        final keyboard = HardwareKeyboard.instance;
-                        if (event is KeyDownEvent &&
-                            event.logicalKey == LogicalKeyboardKey.keyV &&
-                            (keyboard.isControlPressed ||
-                                keyboard.isMetaPressed)) {
-                          unawaited(_paste());
-                          return KeyEventResult.handled;
-                        }
-                        return KeyEventResult.ignored;
-                      },
+                  ImageDropRegion(
+                    key: const Key('full-editor-image-drop-region'),
+                    onImagesDropped: _importAndInsertImages,
+                    onError: _showDropError,
+                    child: QuillEditor.basic(
+                      key: const Key('content-field'),
+                      controller: _documentController,
+                      config: QuillEditorConfig(
+                        scrollable: false,
+                        autoFocus: !widget.isEditing,
+                        minHeight: 320,
+                        placeholder: 'Start typing or paste anything…',
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        showCodeBlockLineNumbers: false,
+                        embedBuilders: [imageBuilder],
+                        // Flutter Quill 11.6 exposes this hook as experimental,
+                        // but it is its supported boundary for overriding Ctrl+V.
+                        // ignore: experimental_member_use
+                        onKeyPressed: (event, _) {
+                          final keyboard = HardwareKeyboard.instance;
+                          if (event is KeyDownEvent &&
+                              event.logicalKey == LogicalKeyboardKey.keyV &&
+                              (keyboard.isControlPressed ||
+                                  keyboard.isMetaPressed)) {
+                            unawaited(_paste());
+                            return KeyEventResult.handled;
+                          }
+                          return KeyEventResult.ignored;
+                        },
+                      ),
                     ),
                   ),
                   const SizedBox(height: 12),
