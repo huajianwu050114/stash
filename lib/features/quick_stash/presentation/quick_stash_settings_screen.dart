@@ -3,9 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hotkey_manager/hotkey_manager.dart';
 
 import '../../../app/providers.dart';
 import '../domain/quick_stash_settings.dart';
+import 'quick_stash_hotkey_adapter.dart';
 
 class QuickStashSettingsScreen extends ConsumerStatefulWidget {
   const QuickStashSettingsScreen({super.key});
@@ -17,55 +19,28 @@ class QuickStashSettingsScreen extends ConsumerStatefulWidget {
 
 class _QuickStashSettingsScreenState
     extends ConsumerState<QuickStashSettingsScreen> {
-  final FocusNode _recorderFocus = FocusNode(debugLabel: 'shortcut-recorder');
   bool _recording = false;
-
-  @override
-  void dispose() {
-    _recorderFocus.dispose();
-    super.dispose();
-  }
 
   void _startRecording() {
     ref.read(quickStashSettingsControllerProvider).clearShortcutError();
     setState(() => _recording = true);
-    _recorderFocus.requestFocus();
   }
 
-  KeyEventResult _recordKey(KeyEvent event) {
-    if (!_recording) return KeyEventResult.ignored;
-    if (event is! KeyDownEvent) return KeyEventResult.handled;
-    if (event.logicalKey == LogicalKeyboardKey.escape) {
+  void _recordHotKey(HotKey hotKey) {
+    if (hotKey.physicalKey == PhysicalKeyboardKey.escape) {
       setState(() => _recording = false);
-      return KeyEventResult.handled;
+      return;
     }
-    if (_isModifier(event.physicalKey)) return KeyEventResult.handled;
-    final keyboard = HardwareKeyboard.instance;
-    final modifiers = <QuickShortcutModifier>{
-      if (keyboard.isControlPressed) QuickShortcutModifier.control,
-      if (keyboard.isShiftPressed) QuickShortcutModifier.shift,
-      if (keyboard.isAltPressed) QuickShortcutModifier.alt,
-      if (keyboard.isMetaPressed) QuickShortcutModifier.meta,
-    };
-    final shortcut = QuickStashShortcut(
-      keyId: event.physicalKey.usbHidUsage,
-      keyLabel: event.physicalKey.debugName ?? event.logicalKey.keyLabel,
-      modifiers: modifiers,
-    );
-    unawaited(_commitShortcut(shortcut));
-    return KeyEventResult.handled;
+    final usage = hotKey.physicalKey.usbHidUsage & 0xffff;
+    if (usage >= 0xe0 && usage <= 0xe7) return;
+    unawaited(_commitShortcut(quickStashShortcutFromHotKey(hotKey)));
   }
 
   Future<void> _commitShortcut(QuickStashShortcut shortcut) async {
-    final saved = await ref
+    await ref
         .read(quickStashSettingsControllerProvider)
         .changeShortcut(shortcut);
-    if (saved && mounted) setState(() => _recording = false);
-  }
-
-  bool _isModifier(PhysicalKeyboardKey key) {
-    final usage = key.usbHidUsage & 0xffff;
-    return usage >= 0xe0 && usage <= 0xe7;
+    if (mounted) setState(() => _recording = false);
   }
 
   @override
@@ -111,24 +86,55 @@ class _QuickStashSettingsScreenState
                 if (!settings.shortcutSupported)
                   const Text('Global shortcuts are available on Windows.')
                 else ...[
-                  Focus(
-                    focusNode: _recorderFocus,
-                    onKeyEvent: (_, event) => _recordKey(event),
-                    child: OutlinedButton.icon(
+                  if (_recording)
+                    Container(
+                      key: const Key('shortcut-recorder-input'),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.keyboard_alt_outlined),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('Press a shortcut'),
+                                const SizedBox(height: 4),
+                                HotKeyRecorder(
+                                  initalHotKey: quickStashShortcutToHotKey(
+                                    settings.settings.globalShortcut,
+                                  ),
+                                  onHotKeyRecorded: _recordHotKey,
+                                ),
+                              ],
+                            ),
+                          ),
+                          TextButton(
+                            key: const Key('shortcut-recorder-cancel'),
+                            onPressed: () => setState(() => _recording = false),
+                            child: const Text('Cancel'),
+                          ),
+                        ],
+                      ),
+                    )
+                  else
+                    OutlinedButton.icon(
                       key: const Key('shortcut-recorder'),
                       onPressed: _startRecording,
-                      icon: Icon(
-                        _recording
-                            ? Icons.keyboard_alt_outlined
-                            : Icons.keyboard_outlined,
-                      ),
+                      icon: const Icon(Icons.keyboard_outlined),
                       label: Text(
-                        _recording
-                            ? 'Press shortcut…'
-                            : settings.settings.globalShortcut.displayLabel,
+                        settings.settings.globalShortcut.displayLabel,
                       ),
                     ),
-                  ),
                   if (settings.shortcutError != null) ...[
                     const SizedBox(height: 8),
                     Text(

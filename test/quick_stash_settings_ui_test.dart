@@ -40,20 +40,63 @@ void main() {
     expect(find.text('Quick Stash Shortcut'), findsOneWidget);
     await tester.tap(find.byKey(const Key('shortcut-recorder')));
     await tester.pump();
-    expect(find.text('Press shortcut…'), findsOneWidget);
+    expect(find.text('Press a shortcut'), findsOneWidget);
+    expect(find.byKey(const Key('shortcut-recorder-input')), findsOneWidget);
 
-    await tester.sendKeyEvent(LogicalKeyboardKey.f8);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
     await tester.pump();
     await tester.pump(Duration.zero);
 
-    expect(find.text('F8'), findsOneWidget);
-    expect(settings.settings.globalShortcut.keyLabel, 'F8');
-    expect(hotkeys.registered.last.keyLabel, 'F8');
+    expect(find.text('Ctrl + I'), findsOneWidget);
+    expect(settings.settings.globalShortcut.keyLabel, 'I');
+    expect(settings.settings.globalShortcut.modifiers, {
+      QuickShortcutModifier.control,
+    });
+    expect(hotkeys.registered.last.displayLabel, 'Ctrl + I');
 
     await tester.tap(find.byKey(const Key('submit-mode-control-enter')));
     await tester.pump();
     await tester.pump(Duration.zero);
     expect(settings.settings.submitMode, QuickCaptureSubmitMode.controlEnter);
+  });
+
+  testWidgets('Escape cancels shortcut recording without changing settings', (
+    tester,
+  ) async {
+    final hotkeys = _FakeHotkeys();
+    final settings = QuickStashSettingsController(
+      repository: QuickStashSettingsRepository(
+        MemoryQuickStashPreferenceStore(),
+      ),
+      hotkeys: hotkeys,
+      onGlobalShortcut: () {},
+    );
+    await settings.initialize();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          quickStashSettingsControllerProvider.overrideWithValue(settings),
+          appearanceRepositoryProvider.overrideWithValue(
+            AppearanceRepository(_MemoryAppearancePreferences()),
+          ),
+        ],
+        child: const MaterialApp(home: QuickStashSettingsScreen()),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('shortcut-recorder')));
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+
+    expect(find.byKey(const Key('shortcut-recorder-input')), findsNothing);
+    expect(
+      settings.settings.globalShortcut,
+      QuickStashShortcut.defaultShortcut,
+    );
   });
 }
 
