@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -232,13 +234,16 @@ class _RootPane extends ConsumerWidget {
               icon: const Icon(Icons.chevron_left_rounded, size: 22),
             ),
           ),
-        _LocationTile(
-          key: const Key('open-inbox'),
-          icon: Icons.inbox_outlined,
-          title: 'Inbox',
-          subtitle: 'Things you saved without filing',
-          selected: selectedKind == _ViewKind.inbox,
-          onTap: () => onSpecial(_ViewKind.inbox),
+        _ItemDropTarget(
+          channelId: null,
+          child: _LocationTile(
+            key: const Key('open-inbox'),
+            icon: Icons.inbox_outlined,
+            title: 'Inbox',
+            subtitle: 'Things you saved without filing',
+            selected: selectedKind == _ViewKind.inbox,
+            onTap: () => onSpecial(_ViewKind.inbox),
+          ),
         ),
         _LocationTile(
           key: const Key('open-pinned'),
@@ -361,12 +366,15 @@ class _CollapsedRootPane extends StatelessWidget {
           key: const Key('collapsed-root-browser'),
           padding: const EdgeInsets.symmetric(horizontal: 4),
           children: [
-            _SidebarIconButton(
-              key: const Key('open-inbox'),
-              icon: Icons.inbox_outlined,
-              tooltip: 'Inbox',
-              selected: selectedKind == _ViewKind.inbox,
-              onTap: () => onSpecial(_ViewKind.inbox),
+            _ItemDropTarget(
+              channelId: null,
+              child: _SidebarIconButton(
+                key: const Key('open-inbox'),
+                icon: Icons.inbox_outlined,
+                tooltip: 'Inbox',
+                selected: selectedKind == _ViewKind.inbox,
+                onTap: () => onSpecial(_ViewKind.inbox),
+              ),
             ),
             _SidebarIconButton(
               key: const Key('open-pinned'),
@@ -382,12 +390,15 @@ class _CollapsedRootPane extends StatelessWidget {
             ...channels.when(
               data: (values) => [
                 for (final channel in values)
-                  _SidebarIconButton(
-                    key: Key('channel-${channel.id}'),
-                    icon: Icons.folder_outlined,
-                    tooltip: channel.name,
-                    selected: selectedChannelId == channel.id,
-                    onTap: () => onChannel(channel),
+                  _ItemDropTarget(
+                    channelId: channel.id,
+                    child: _SidebarIconButton(
+                      key: Key('channel-${channel.id}'),
+                      icon: Icons.folder_outlined,
+                      tooltip: channel.name,
+                      selected: selectedChannelId == channel.id,
+                      onTap: () => onChannel(channel),
+                    ),
                   ),
               ],
               loading: () => const [
@@ -831,19 +842,83 @@ class _ChannelTile extends StatelessWidget {
   final bool nested;
 
   @override
-  Widget build(BuildContext context) => ListTile(
-    key: Key('channel-${channel.id}'),
-    dense: true,
-    selected: selected,
-    selectedTileColor: Theme.of(context).colorScheme.secondaryContainer,
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-    leading: Icon(
-      nested ? Icons.subdirectory_arrow_right_rounded : Icons.folder_outlined,
-      size: 20,
+  Widget build(BuildContext context) => _ItemDropTarget(
+    channelId: channel.id,
+    child: ListTile(
+      key: Key('channel-${channel.id}'),
+      dense: true,
+      selected: selected,
+      selectedTileColor: Theme.of(context).colorScheme.secondaryContainer,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      leading: Icon(
+        nested ? Icons.folder_open_outlined : Icons.folder_outlined,
+        size: 20,
+      ),
+      title: Text(channel.name),
+      trailing: const Icon(Icons.chevron_right_rounded, size: 18),
+      onTap: onTap,
     ),
-    title: Text(channel.name),
-    trailing: const Icon(Icons.chevron_right_rounded, size: 18),
-    onTap: onTap,
+  );
+}
+
+class _ItemDragData {
+  const _ItemDragData({required this.itemId, required this.sourceChannelId});
+
+  final String itemId;
+  final String? sourceChannelId;
+}
+
+class _ItemDropTarget extends ConsumerStatefulWidget {
+  const _ItemDropTarget({required this.channelId, required this.child});
+
+  final String? channelId;
+  final Widget child;
+
+  @override
+  ConsumerState<_ItemDropTarget> createState() => _ItemDropTargetState();
+}
+
+class _ItemDropTargetState extends ConsumerState<_ItemDropTarget> {
+  bool _hovered = false;
+
+  bool _canAccept(_ItemDragData? data) =>
+      data != null && data.sourceChannelId != widget.channelId;
+
+  Future<void> _move(_ItemDragData data) async {
+    setState(() => _hovered = false);
+    try {
+      await ref
+          .read(itemRepositoryProvider)
+          .moveItem(data.itemId, channelId: widget.channelId);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not move this item.')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => DragTarget<_ItemDragData>(
+    onWillAcceptWithDetails: (details) {
+      final accepted = _canAccept(details.data);
+      if (_hovered != accepted) setState(() => _hovered = accepted);
+      return accepted;
+    },
+    onLeave: (_) {
+      if (_hovered) setState(() => _hovered = false);
+    },
+    onAcceptWithDetails: (details) => unawaited(_move(details.data)),
+    builder: (context, _, _) => AnimatedContainer(
+      duration: const Duration(milliseconds: 120),
+      decoration: BoxDecoration(
+        color: _hovered
+            ? Theme.of(context).colorScheme.primaryContainer
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: widget.child,
+    ),
   );
 }
 
@@ -915,6 +990,7 @@ class _ItemPreview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final title = item.title?.trim();
+    final desktop = MediaQuery.sizeOf(context).width >= 900;
     return InkWell(
       key: Key('item-preview-${item.id}'),
       onTap: () => Navigator.of(context).push(
@@ -924,21 +1000,73 @@ class _ItemPreview extends StatelessWidget {
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Column(
+        child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (title != null && title.isNotEmpty) ...[
-              Text(title, style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 5),
-            ],
-            Text(item.content, maxLines: 3, overflow: TextOverflow.ellipsis),
-            if (item.tags.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text(
-                item.tags.map((tag) => '#$tag').join('  '),
-                style: TextStyle(color: Theme.of(context).colorScheme.primary),
+            if (desktop) ...[
+              Draggable<_ItemDragData>(
+                data: _ItemDragData(
+                  itemId: item.id,
+                  sourceChannelId: item.channelId,
+                ),
+                feedback: Material(
+                  elevation: 4,
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    constraints: const BoxConstraints(maxWidth: 280),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
+                    child: Text(
+                      title?.isNotEmpty == true ? title! : item.content,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+                childWhenDragging: const SizedBox(
+                  width: 32,
+                  height: 32,
+                  child: Icon(Icons.drag_indicator_rounded, color: Colors.grey),
+                ),
+                child: Tooltip(
+                  message: 'Drag to a channel',
+                  child: SizedBox(
+                    key: Key('item-drag-handle-${item.id}'),
+                    width: 32,
+                    height: 32,
+                    child: const Icon(Icons.drag_indicator_rounded, size: 19),
+                  ),
+                ),
               ),
+              const SizedBox(width: 8),
             ],
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (title != null && title.isNotEmpty) ...[
+                    Text(title, style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: 5),
+                  ],
+                  Text(
+                    item.content,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (item.tags.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      item.tags.map((tag) => '#$tag').join('  '),
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
           ],
         ),
       ),

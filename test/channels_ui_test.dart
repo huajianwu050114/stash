@@ -211,6 +211,37 @@ void main() {
     await disposeApp(tester);
   });
 
+  testWidgets('desktop drag handle moves an item to a channel and Inbox', (
+    tester,
+  ) async {
+    final channel = await channels.createRootChannel(
+      id: 'drop-target',
+      name: 'Drop target',
+    );
+    final item = await items.createItem(id: 'drag-me', content: 'Drag me');
+    await pumpApp(tester, size: const Size(1200, 800));
+
+    await dragTo(
+      tester,
+      find.byKey(Key('item-drag-handle-${item.id}')),
+      find.byKey(Key('channel-${channel.id}')),
+    );
+    await pumpUi(tester);
+    expect((await items.getItemById(item.id))!.channelId, channel.id);
+
+    await tester.tap(find.byKey(Key('channel-${channel.id}')));
+    await pumpUi(tester);
+    expect(find.byKey(Key('item-drag-handle-${item.id}')), findsOneWidget);
+    await dragTo(
+      tester,
+      find.byKey(Key('item-drag-handle-${item.id}')),
+      find.byKey(const Key('open-inbox')),
+    );
+    await pumpUi(tester);
+    expect((await items.getItemById(item.id))!.channelId, isNull);
+    await disposeApp(tester);
+  });
+
   testWidgets(
     'channel deletion refuses content and hides tombstoned channels',
     (tester) async {
@@ -276,5 +307,15 @@ Future<void> enterDocumentText(WidgetTester tester, String text) async {
     text,
     TextSelection.collapsed(offset: text.length),
   );
+  await tester.pump();
+}
+
+Future<void> dragTo(WidgetTester tester, Finder source, Finder target) async {
+  final gesture = await tester.startGesture(tester.getCenter(source));
+  await gesture.moveBy(const Offset(12, 0));
+  await tester.pump();
+  await gesture.moveTo(tester.getCenter(target));
+  await tester.pump(const Duration(milliseconds: 200));
+  await gesture.up();
   await tester.pump();
 }
