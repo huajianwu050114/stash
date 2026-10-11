@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -102,162 +103,259 @@ class _PaletteHeader extends StatelessWidget {
   );
 }
 
-class _PaletteContents extends ConsumerWidget {
+class _PaletteContents extends ConsumerStatefulWidget {
   const _PaletteContents({required this.items});
 
-  static const _codec = ItemDocumentCodec();
   final List<Item> items;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final images = <String>[];
-    final textItems = <Item>[];
-    for (final item in items) {
-      try {
-        final document = _codec.decode(
-          documentJson: item.documentJson,
-          legacyText: item.content,
-        );
-        final attachmentIds = _codec.snapshot(document).imageAttachmentIds;
-        if (attachmentIds.isEmpty) {
-          textItems.add(item);
-        } else {
-          images.addAll(attachmentIds);
-        }
-      } catch (_) {
-        textItems.add(item);
-      }
-    }
-    if (images.isEmpty && textItems.isEmpty) {
-      return const _PaletteMessage('This Channel is empty.');
-    }
-
-    return CustomScrollView(
-      key: const Key('quick-channel-contents'),
-      slivers: [
-        if (images.isNotEmpty) ...[
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-            sliver: SliverGrid.builder(
-              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 160,
-                mainAxisSpacing: 8,
-                crossAxisSpacing: 8,
-              ),
-              itemCount: images.length,
-              itemBuilder: (context, index) =>
-                  _PaletteImage(attachmentId: images[index]),
-            ),
-          ),
-        ],
-        if (textItems.isNotEmpty) ...[
-          SliverPadding(
-            padding: EdgeInsets.fromLTRB(16, images.isEmpty ? 12 : 8, 16, 6),
-            sliver: SliverToBoxAdapter(
-              child: Text(
-                'Text items',
-                style: Theme.of(context).textTheme.labelLarge,
-              ),
-            ),
-          ),
-          SliverList.separated(
-            itemCount: textItems.length,
-            separatorBuilder: (_, _) => const Divider(height: 1, indent: 16),
-            itemBuilder: (context, index) {
-              final item = textItems[index];
-              final title = item.title?.trim();
-              return ListTile(
-                key: Key('quick-channel-text-${item.id}'),
-                dense: true,
-                title: Text(
-                  title == null || title.isEmpty ? item.content : title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                subtitle: title == null || title.isEmpty
-                    ? null
-                    : Text(
-                        item.content,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-              );
-            },
-          ),
-        ],
-        const SliverToBoxAdapter(child: SizedBox(height: 16)),
-      ],
-    );
-  }
+  ConsumerState<_PaletteContents> createState() => _PaletteContentsState();
 }
 
-class _PaletteImage extends ConsumerStatefulWidget {
-  const _PaletteImage({required this.attachmentId});
-
-  final String attachmentId;
-
-  @override
-  ConsumerState<_PaletteImage> createState() => _PaletteImageState();
-}
-
-class _PaletteImageState extends ConsumerState<_PaletteImage> {
+class _PaletteContentsState extends ConsumerState<_PaletteContents> {
   late AttachmentRepository _repository;
-  late Future<Uint8List?> _bytes;
+  late List<String> _imageIds;
+  late Future<_ResolvedPaletteImages> _resolvedImages;
 
   @override
   void initState() {
     super.initState();
     _repository = ref.read(attachmentRepositoryProvider);
-    _bytes = _loadBytes();
+    _imageIds = _partitionPaletteItems(widget.items).images;
+    _resolvedImages = _resolveImages();
   }
 
   @override
-  void didUpdateWidget(covariant _PaletteImage oldWidget) {
+  void didUpdateWidget(covariant _PaletteContents oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.attachmentId != widget.attachmentId) {
-      _bytes = _loadBytes();
+    final imageIds = _partitionPaletteItems(widget.items).images;
+    if (!listEquals(imageIds, _imageIds)) {
+      _imageIds = imageIds;
+      _resolvedImages = _resolveImages();
     }
   }
 
-  Future<Uint8List?> _loadBytes() => _repository
-      .resolveAttachmentFile(widget.attachmentId)
-      .then((file) => file?.readAsBytes());
+  Future<_ResolvedPaletteImages> _resolveImages() async {
+    final available = <_PaletteImageData>[];
+    var missing = 0;
+    for (final attachmentId in _imageIds) {
+      try {
+        final file = await _repository.resolveAttachmentFile(attachmentId);
+        final bytes = await file?.readAsBytes();
+        if (bytes == null || bytes.isEmpty) {
+          missing++;
+        } else {
+          available.add(
+            _PaletteImageData(attachmentId: attachmentId, bytes: bytes),
+          );
+        }
+      } catch (_) {
+        missing++;
+      }
+    }
+    return _ResolvedPaletteImages(available: available, missing: missing);
+  }
 
   @override
   Widget build(BuildContext context) {
     final repository = ref.watch(attachmentRepositoryProvider);
     if (!identical(repository, _repository)) {
       _repository = repository;
-      _bytes = _loadBytes();
+      _resolvedImages = _resolveImages();
     }
+    final partition = _partitionPaletteItems(widget.items);
+    if (_imageIds.isEmpty && partition.textItems.isEmpty) {
+      return const _PaletteMessage('This Channel is empty.');
+    }
+
+    return FutureBuilder<_ResolvedPaletteImages>(
+      future: _resolvedImages,
+      builder: (context, snapshot) {
+        final images = snapshot.data;
+        return CustomScrollView(
+          key: const Key('quick-channel-contents'),
+          slivers: [
+            if (snapshot.connectionState != ConnectionState.done &&
+                _imageIds.isNotEmpty)
+              const SliverToBoxAdapter(
+                child: SizedBox(
+                  height: 64,
+                  child: Center(
+                    child: SizedBox.square(
+                      dimension: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
+                ),
+              ),
+            if (images != null && images.available.isNotEmpty)
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+                sliver: SliverToBoxAdapter(
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final image in images.available)
+                        SizedBox(
+                          width: 144,
+                          height: 112,
+                          child: _PaletteImage(image: image),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            if (images != null && images.missing > 0)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 6, 12, 4),
+                  child: Container(
+                    key: const Key('quick-channel-missing-images'),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.broken_image_outlined, size: 18),
+                        const SizedBox(width: 8),
+                        Text(
+                          images.missing == 1
+                              ? '1 image unavailable'
+                              : '${images.missing} images unavailable',
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            if (partition.textItems.isNotEmpty) ...[
+              SliverPadding(
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  images?.available.isEmpty ?? true ? 12 : 8,
+                  16,
+                  6,
+                ),
+                sliver: SliverToBoxAdapter(
+                  child: Text(
+                    'Text items',
+                    style: Theme.of(context).textTheme.labelLarge,
+                  ),
+                ),
+              ),
+              SliverList.separated(
+                itemCount: partition.textItems.length,
+                separatorBuilder: (_, _) =>
+                    const Divider(height: 1, indent: 16),
+                itemBuilder: (context, index) {
+                  final item = partition.textItems[index];
+                  final title = item.title?.trim();
+                  return ListTile(
+                    key: Key('quick-channel-text-${item.id}'),
+                    dense: true,
+                    title: Text(
+                      title == null || title.isEmpty ? item.content : title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: title == null || title.isEmpty
+                        ? null
+                        : Text(
+                            item.content,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                  );
+                },
+              ),
+            ],
+            const SliverToBoxAdapter(child: SizedBox(height: 16)),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _PaletteImageData {
+  const _PaletteImageData({required this.attachmentId, required this.bytes});
+
+  final String attachmentId;
+  final Uint8List bytes;
+}
+
+class _ResolvedPaletteImages {
+  const _ResolvedPaletteImages({
+    required this.available,
+    required this.missing,
+  });
+
+  final List<_PaletteImageData> available;
+  final int missing;
+}
+
+class _PaletteImage extends ConsumerWidget {
+  const _PaletteImage({required this.image});
+
+  final _PaletteImageData image;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final repository = ref.watch(attachmentRepositoryProvider);
     return StashImageDragSource(
-      key: Key('quick-channel-image-${widget.attachmentId}'),
-      attachmentId: widget.attachmentId,
+      key: Key('quick-channel-image-${image.attachmentId}'),
+      attachmentId: image.attachmentId,
       repository: repository,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(10),
         child: ColoredBox(
           color: Theme.of(context).colorScheme.surfaceContainerHighest,
-          child: FutureBuilder<Uint8List?>(
-            future: _bytes,
-            builder: (context, snapshot) {
-              final bytes = snapshot.data;
-              if (bytes == null) {
-                return const Center(child: Icon(Icons.image_outlined));
-              }
-              return Image.memory(
-                bytes,
-                fit: BoxFit.cover,
-                cacheWidth: 360,
-                errorBuilder: (_, _, _) =>
-                    const Center(child: Icon(Icons.broken_image_outlined)),
-              );
-            },
+          child: Image.memory(
+            image.bytes,
+            fit: BoxFit.cover,
+            cacheWidth: 288,
+            cacheHeight: 224,
+            errorBuilder: (_, _, _) =>
+                const Center(child: Icon(Icons.broken_image_outlined)),
           ),
         ),
       ),
     );
   }
+}
+
+({List<String> images, List<Item> textItems}) _partitionPaletteItems(
+  List<Item> items,
+) {
+  const codec = ItemDocumentCodec();
+  final images = <String>[];
+  final textItems = <Item>[];
+  for (final item in items) {
+    try {
+      final document = codec.decode(
+        documentJson: item.documentJson,
+        legacyText: item.content,
+      );
+      final attachmentIds = codec.snapshot(document).imageAttachmentIds;
+      if (attachmentIds.isEmpty) {
+        textItems.add(item);
+      } else {
+        images.addAll(attachmentIds);
+      }
+    } catch (_) {
+      textItems.add(item);
+    }
+  }
+  return (images: images, textItems: textItems);
 }
 
 class _PaletteMessage extends StatelessWidget {

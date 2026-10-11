@@ -190,25 +190,24 @@ void main() {
     },
   );
 
-  testWidgets('palette loads an image grid and text fallback', (tester) async {
+  testWidgets('palette keeps missing media compact beside text', (
+    tester,
+  ) async {
     final items = ItemRepository(db);
     final channel = await channels.createRootChannel(
       id: 'palette',
       name: 'Memes',
     );
-    const attachmentId = 'palette-image';
+    const attachmentId = 'missing-image';
     const codec = ItemDocumentCodec();
-    final imageDocument = Document.fromJson([
-      {
-        'insert': BlockEmbed.custom(const StashImageEmbed(attachmentId))
-            .toJson(),
-      },
+    Document imageDocument(String id) => Document.fromJson([
+      {'insert': BlockEmbed.custom(StashImageEmbed(id)).toJson()},
       {'insert': '\n'},
     ]);
     await items.createItem(
-      id: 'image-item',
+      id: 'missing-image-item',
       channelId: channel.id,
-      document: codec.snapshot(imageDocument),
+      document: codec.snapshot(imageDocument(attachmentId)),
     );
     await items.createItem(
       id: 'text-item',
@@ -231,8 +230,19 @@ void main() {
 
     expect(find.text('Memes'), findsOneWidget);
     expect(
-      find.byKey(const Key('quick-channel-image-palette-image')),
+      find.byKey(const Key('quick-channel-image-missing-image')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const Key('quick-channel-missing-images')),
       findsOneWidget,
+    );
+    expect(find.text('1 image unavailable'), findsOneWidget);
+    expect(
+      tester
+          .getSize(find.byKey(const Key('quick-channel-missing-images')))
+          .height,
+      lessThan(64),
     );
     expect(
       find.byKey(const Key('quick-channel-text-text-item')),

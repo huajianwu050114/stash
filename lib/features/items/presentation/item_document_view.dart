@@ -65,7 +65,15 @@ class _ItemDocumentViewState extends State<ItemDocumentView> {
       enableInteractiveSelection: true,
       padding: EdgeInsets.zero,
       showCodeBlockLineNumbers: false,
-      embedBuilders: [StashImageEmbedBuilder(widget.attachmentRepository)],
+      embedBuilders: [
+        StashImageEmbedBuilder(
+          widget.attachmentRepository,
+          maxWidth: 420,
+          maxHeight: 340,
+          cacheWidth: 840,
+          expandWidth: false,
+        ),
+      ],
     ),
   );
 }

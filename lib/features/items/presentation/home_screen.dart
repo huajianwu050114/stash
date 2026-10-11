@@ -1,11 +1,14 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/providers.dart';
+import '../../attachments/data/attachment_repository.dart';
 import '../../channels/domain/channel.dart';
 import '../../channels/presentation/location_picker.dart';
+import '../data/item_document_codec.dart';
 import '../domain/item.dart';
 import '../../quick_stash/presentation/quick_stash_settings_screen.dart';
 import 'item_detail_screen.dart';
@@ -986,11 +989,25 @@ class _ItemSection extends StatelessWidget {
 class _ItemPreview extends StatelessWidget {
   const _ItemPreview({required this.item});
   final Item item;
+  static const _codec = ItemDocumentCodec();
+
+  List<String> get _imageAttachmentIds {
+    try {
+      final document = _codec.decode(
+        documentJson: item.documentJson,
+        legacyText: item.content,
+      );
+      return _codec.snapshot(document).imageAttachmentIds.toList();
+    } catch (_) {
+      return const [];
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final title = item.title?.trim();
     final desktop = MediaQuery.sizeOf(context).width >= 900;
+    final imageAttachmentIds = _imageAttachmentIds;
     return InkWell(
       key: Key('item-preview-${item.id}'),
       onTap: () => Navigator.of(context).push(
@@ -1050,11 +1067,21 @@ class _ItemPreview extends StatelessWidget {
                     Text(title, style: Theme.of(context).textTheme.titleMedium),
                     const SizedBox(height: 5),
                   ],
-                  Text(
-                    item.content,
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                  if (item.content.trim().isNotEmpty)
+                    Text(
+                      item.content,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                    )
+                  else if (imageAttachmentIds.isNotEmpty)
+                    Text(
+                      imageAttachmentIds.length == 1
+                          ? 'Image'
+                          : '${imageAttachmentIds.length} images',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
                   if (item.tags.isNotEmpty) ...[
                     const SizedBox(height: 8),
                     Text(
@@ -1067,6 +1094,122 @@ class _ItemPreview extends StatelessWidget {
                 ],
               ),
             ),
+            if (imageAttachmentIds.isNotEmpty) ...[
+              const SizedBox(width: 12),
+              _ItemImageThumbnail(
+                itemId: item.id,
+                attachmentIds: imageAttachmentIds,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ItemImageThumbnail extends ConsumerStatefulWidget {
+  const _ItemImageThumbnail({
+    required this.itemId,
+    required this.attachmentIds,
+  });
+
+  final String itemId;
+  final List<String> attachmentIds;
+
+  @override
+  ConsumerState<_ItemImageThumbnail> createState() =>
+      _ItemImageThumbnailState();
+}
+
+class _ItemImageThumbnailState extends ConsumerState<_ItemImageThumbnail> {
+  late AttachmentRepository _repository;
+  late Future<Uint8List?> _bytes;
+
+  @override
+  void initState() {
+    super.initState();
+    _repository = ref.read(attachmentRepositoryProvider);
+    _bytes = _loadBytes();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ItemImageThumbnail oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.attachmentIds.first != widget.attachmentIds.first) {
+      _bytes = _loadBytes();
+    }
+  }
+
+  Future<Uint8List?> _loadBytes() async {
+    final file = await _repository.resolveAttachmentFile(
+      widget.attachmentIds.first,
+    );
+    return file?.readAsBytes();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final repository = ref.watch(attachmentRepositoryProvider);
+    if (!identical(repository, _repository)) {
+      _repository = repository;
+      _bytes = _loadBytes();
+    }
+    return SizedBox.square(
+      key: Key('item-thumbnail-${widget.itemId}'),
+      dimension: 80,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(9),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            ColoredBox(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              child: FutureBuilder<Uint8List?>(
+                future: _bytes,
+                builder: (context, snapshot) {
+                  final bytes = snapshot.data;
+                  if (bytes == null) {
+                    return const Icon(Icons.image_not_supported_outlined);
+                  }
+                  return Image.memory(
+                    bytes,
+                    key: Key(
+                      'item-thumbnail-image-${widget.attachmentIds.first}',
+                    ),
+                    width: 80,
+                    height: 80,
+                    fit: BoxFit.cover,
+                    cacheWidth: 160,
+                    cacheHeight: 160,
+                    errorBuilder: (_, _, _) =>
+                        const Icon(Icons.broken_image_outlined),
+                  );
+                },
+              ),
+            ),
+            if (widget.attachmentIds.length > 1)
+              Positioned(
+                right: 5,
+                bottom: 5,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.72),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    child: Text(
+                      '+${widget.attachmentIds.length - 1}',
+                      key: Key('item-thumbnail-count-${widget.itemId}'),
+                      style: const TextStyle(color: Colors.white, fontSize: 11),
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
       ),

@@ -129,6 +129,11 @@ void main() {
       item.documentJson,
       isNot(contains(base64Encode(_imageData('x').bytes))),
     );
+    expect(find.byKey(Key('item-thumbnail-${item.id}')), findsOneWidget);
+    expect(
+      tester.getSize(find.byKey(Key('item-thumbnail-${item.id}'))),
+      const Size.square(80),
+    );
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(Duration.zero);
@@ -145,6 +150,11 @@ void main() {
       find.byKey(Key('attachment-drag-source-${attachmentRow.id}')),
       findsOneWidget,
     );
+    final display = tester.widget<ConstrainedBox>(
+      find.byKey(Key('attachment-display-${attachmentRow.id}')),
+    );
+    expect(display.constraints.maxWidth, 420);
+    expect(display.constraints.maxHeight, 340);
     await disposeApp(tester);
   });
 

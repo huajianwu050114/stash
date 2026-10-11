@@ -7,6 +7,7 @@ import 'package:stash/app/desktop_shell_preferences.dart';
 import 'package:stash/app/providers.dart';
 import 'package:stash/core/database/app_database.dart';
 import 'package:stash/features/channels/data/channel_repository.dart';
+import 'package:stash/features/items/data/item_document_codec.dart';
 import 'package:stash/features/items/data/item_repository.dart';
 
 import 'test_database.dart';
@@ -124,6 +125,38 @@ void main() {
     await tester.tap(find.byKey(const Key('save-item-button')));
     await pumpUi(tester);
     expect((await db.select(db.items).getSingle()).channelId, isNull);
+    await disposeApp(tester);
+  });
+
+  testWidgets('item list shows one bounded thumbnail with an image count', (
+    tester,
+  ) async {
+    const codec = ItemDocumentCodec();
+    final document = Document.fromJson([
+      {
+        'insert': BlockEmbed.custom(const StashImageEmbed('first-image'))
+            .toJson(),
+      },
+      {
+        'insert': BlockEmbed.custom(const StashImageEmbed('second-image'))
+            .toJson(),
+      },
+      {'insert': '\n'},
+    ]);
+    final item = await items.createItem(
+      id: 'image-preview',
+      document: codec.snapshot(document),
+    );
+
+    await pumpApp(tester, size: const Size(430, 800));
+
+    expect(find.text('2 images'), findsOneWidget);
+    expect(
+      tester.getSize(find.byKey(Key('item-thumbnail-${item.id}'))),
+      const Size.square(80),
+    );
+    expect(find.byKey(Key('item-thumbnail-count-${item.id}')), findsOneWidget);
+    expect(find.text('+1'), findsOneWidget);
     await disposeApp(tester);
   });
 
