@@ -36,6 +36,12 @@ class HotkeyManagerService implements GlobalHotkeyService {
     if (hotKey != null) await hotKeyManager.unregister(hotKey);
   }
 
+  @override
+  Future<void> shutdown() async {
+    _registered.clear();
+    await hotKeyManager.unregisterAll();
+  }
+
   HotKeyModifier _modifier(QuickShortcutModifier modifier) =>
       switch (modifier) {
         QuickShortcutModifier.control => HotKeyModifier.control,

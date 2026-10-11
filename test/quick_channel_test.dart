@@ -283,4 +283,9 @@ class _FakeHotkeys implements GlobalHotkeyService {
     unregistered.add(shortcut);
     handlers.remove(shortcut);
   }
+
+  @override
+  Future<void> shutdown() async {
+    handlers.clear();
+  }
 }

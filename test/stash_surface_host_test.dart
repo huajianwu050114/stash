@@ -198,6 +198,18 @@ class _FakeWindow implements DesktopWindowService {
   Future<void> showFull() async {}
 
   @override
+  Future<void> hide() => hideQuick();
+
+  @override
+  Future<void> setCloseHandler(WindowCloseHandler? handler) async {}
+
+  @override
+  Future<void> destroy() async {}
+
+  @override
+  void dispose() {}
+
+  @override
   void addFocusListener(WindowFocusListener listener) {
     _focusListeners.add(listener);
   }

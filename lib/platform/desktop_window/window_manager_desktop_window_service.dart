@@ -14,6 +14,7 @@ class WindowManagerDesktopWindowService
 
   final Set<WindowFocusListener> _focusListeners = {};
   bool _listening = false;
+  WindowCloseHandler? _closeHandler;
 
   @override
   bool get isSupported => true;
@@ -95,6 +96,9 @@ class WindowManagerDesktopWindowService
   Future<void> hideQuick() => windowManager.hide();
 
   @override
+  Future<void> hide() => windowManager.hide();
+
+  @override
   Future<void> showFull() async {
     await windowManager.setAlwaysOnTop(false);
     await windowManager.setSkipTaskbar(false);
@@ -104,6 +108,35 @@ class WindowManagerDesktopWindowService
     await windowManager.center();
     await windowManager.show();
     await windowManager.focus();
+  }
+
+  @override
+  Future<void> setCloseHandler(WindowCloseHandler? handler) async {
+    _closeHandler = handler;
+    await windowManager.setPreventClose(handler != null);
+  }
+
+  @override
+  void onWindowClose() {
+    final handler = _closeHandler;
+    if (handler != null) unawaited(handler());
+  }
+
+  @override
+  Future<void> destroy() async {
+    _closeHandler = null;
+    await windowManager.setPreventClose(false);
+    dispose();
+    await windowManager.destroy();
+  }
+
+  @override
+  void dispose() {
+    if (_listening) {
+      windowManager.removeListener(this);
+      _listening = false;
+    }
+    _focusListeners.clear();
   }
 
   Future<Display> _activeDisplay() async {

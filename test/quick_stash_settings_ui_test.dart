@@ -133,6 +133,9 @@ class _FakeHotkeys implements GlobalHotkeyService {
 
   @override
   Future<void> unregister(QuickStashShortcut shortcut) async {}
+
+  @override
+  Future<void> shutdown() async {}
 }
 
 class _MemoryAppearancePreferences implements AppearancePreferences {

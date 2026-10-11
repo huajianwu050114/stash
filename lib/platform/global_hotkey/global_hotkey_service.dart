@@ -8,6 +8,8 @@ abstract interface class GlobalHotkeyService {
   Future<void> register(QuickStashShortcut shortcut, void Function() onPressed);
 
   Future<void> unregister(QuickStashShortcut shortcut);
+
+  Future<void> shutdown();
 }
 
 class NoopGlobalHotkeyService implements GlobalHotkeyService {
@@ -27,4 +29,7 @@ class NoopGlobalHotkeyService implements GlobalHotkeyService {
 
   @override
   Future<void> unregister(QuickStashShortcut shortcut) async {}
+
+  @override
+  Future<void> shutdown() async {}
 }

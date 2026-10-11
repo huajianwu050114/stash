@@ -1,4 +1,5 @@
 typedef WindowFocusListener = void Function(bool isFocused);
+typedef WindowCloseHandler = Future<void> Function();
 
 abstract interface class DesktopWindowService {
   bool get isSupported;
@@ -20,6 +21,14 @@ abstract interface class DesktopWindowService {
   Future<void> hideQuick();
 
   Future<void> showFull();
+
+  Future<void> hide();
+
+  Future<void> setCloseHandler(WindowCloseHandler? handler);
+
+  Future<void> destroy();
+
+  void dispose();
 }
 
 class NoopDesktopWindowService implements DesktopWindowService {
@@ -54,4 +63,16 @@ class NoopDesktopWindowService implements DesktopWindowService {
 
   @override
   Future<void> showFull() async {}
+
+  @override
+  Future<void> hide() async {}
+
+  @override
+  Future<void> setCloseHandler(WindowCloseHandler? handler) async {}
+
+  @override
+  Future<void> destroy() async {}
+
+  @override
+  void dispose() {}
 }
