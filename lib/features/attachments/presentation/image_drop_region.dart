@@ -9,18 +9,21 @@ import 'drop_environment.dart';
 typedef DroppedImagesCallback = Future<void> Function(
   List<ImportedImageData> images,
 );
+typedef DroppedTextCallback = FutureOr<void> Function(String text);
 
 class ImageDropRegion extends StatefulWidget {
   const ImageDropRegion({
     super.key,
     required this.child,
     required this.onImagesDropped,
+    this.onTextDropped,
     this.onError,
     this.label = 'Drop to stash',
   });
 
   final Widget child;
   final DroppedImagesCallback onImagesDropped;
+  final DroppedTextCallback? onTextDropped;
   final VoidCallback? onError;
   final String label;
 
@@ -29,20 +32,26 @@ class ImageDropRegion extends StatefulWidget {
 }
 
 class _ImageDropRegionState extends State<ImageDropRegion> {
-  static const _formats = <FileFormat>[
+  static const _imageFormats = <FileFormat>[
     Formats.png,
     Formats.jpeg,
     Formats.gif,
     Formats.webp,
   ];
+  static const _formats = <DataFormat>[..._imageFormats, Formats.plainText];
 
   bool _draggingOver = false;
 
   bool _containsImage(DropSession session) =>
-      session.items.any((item) => _formats.any(item.canProvide));
+      session.items.any((item) => _imageFormats.any(item.canProvide));
+
+  bool _containsText(DropSession session) =>
+      widget.onTextDropped != null &&
+      session.items.any((item) => item.canProvide(Formats.plainText));
 
   DropOperation _onDropOver(DropOverEvent event) {
-    final accepted = _containsImage(event.session);
+    final accepted =
+        _containsImage(event.session) || _containsText(event.session);
     if (_draggingOver != accepted && mounted) {
       setState(() => _draggingOver = accepted);
     }
@@ -55,14 +64,24 @@ class _ImageDropRegionState extends State<ImageDropRegion> {
 
   Future<void> _onPerformDrop(PerformDropEvent event) async {
     final pendingImages = _readImages(event);
-    unawaited(_finishDrop(pendingImages));
+    final pendingText = _readText(event);
+    unawaited(_finishDrop(pendingImages, pendingText));
   }
 
-  Future<void> _finishDrop(Future<List<ImportedImageData>> pending) async {
+  Future<void> _finishDrop(
+    Future<List<ImportedImageData>> pendingImages,
+    Future<List<String>> pendingText,
+  ) async {
     try {
-      final images = await pending;
-      if (images.isEmpty) return;
-      await widget.onImagesDropped(images);
+      final images = await pendingImages;
+      if (images.isNotEmpty) {
+        await widget.onImagesDropped(images);
+        return;
+      }
+      final text = (await pendingText)
+          .where((value) => value.isNotEmpty)
+          .join('\n');
+      if (text.isNotEmpty) await widget.onTextDropped?.call(text);
     } catch (_) {
       widget.onError?.call();
     } finally {
@@ -75,7 +94,7 @@ class _ImageDropRegionState extends State<ImageDropRegion> {
     for (final item in event.session.items) {
       final reader = item.dataReader;
       if (reader == null) continue;
-      final available = reader.getFormats(_formats);
+      final available = reader.getFormats(_imageFormats);
       if (available.isEmpty) continue;
       final format = available.first as FileFormat;
       final completer = Completer<ImportedImageData?>();
@@ -97,6 +116,31 @@ class _ImageDropRegionState extends State<ImageDropRegion> {
     }
     return Future.wait(pending)
         .then((images) => images.whereType<ImportedImageData>().toList());
+  }
+
+  Future<List<String>> _readText(PerformDropEvent event) {
+    if (widget.onTextDropped == null) return Future.value(const []);
+    final pending = <Future<String?>>[];
+    for (final item in event.session.items) {
+      final reader = item.dataReader;
+      if (reader == null || !reader.canProvide(Formats.plainText)) continue;
+      final completer = Completer<String?>();
+      final progress = reader.getValue<String>(
+        Formats.plainText,
+        (value) {
+          if (!completer.isCompleted) completer.complete(value);
+        },
+        onError: (error) {
+          if (!completer.isCompleted) completer.completeError(error);
+        },
+      );
+      if (progress == null && !completer.isCompleted) {
+        completer.complete(null);
+      }
+      pending.add(completer.future);
+    }
+    return Future.wait(pending)
+        .then((values) => values.whereType<String>().toList());
   }
 
   static String _mimeType(FileFormat format) {
@@ -130,7 +174,7 @@ class _ImageDropRegionState extends State<ImageDropRegion> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.add_photo_alternate_outlined),
+                      const Icon(Icons.move_to_inbox_outlined),
                       const SizedBox(width: 8),
                       Text(
                         widget.label,

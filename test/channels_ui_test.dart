@@ -244,7 +244,7 @@ void main() {
     await disposeApp(tester);
   });
 
-  testWidgets('desktop drag handle moves an item to a channel and Inbox', (
+  testWidgets('desktop whole-row drag moves an item to a channel and Inbox', (
     tester,
   ) async {
     final channel = await channels.createRootChannel(
@@ -256,7 +256,7 @@ void main() {
 
     await dragTo(
       tester,
-      find.byKey(Key('item-drag-handle-${item.id}')),
+      find.byKey(Key('item-preview-${item.id}')),
       find.byKey(Key('channel-${channel.id}')),
     );
     await pumpUi(tester);
@@ -264,14 +264,20 @@ void main() {
 
     await tester.tap(find.byKey(Key('channel-${channel.id}')));
     await pumpUi(tester);
-    expect(find.byKey(Key('item-drag-handle-${item.id}')), findsOneWidget);
+    expect(find.byKey(Key('item-drag-source-${item.id}')), findsOneWidget);
+    expect(find.byKey(Key('item-drag-handle-${item.id}')), findsNothing);
     await dragTo(
       tester,
-      find.byKey(Key('item-drag-handle-${item.id}')),
+      find.byKey(Key('item-preview-${item.id}')),
       find.byKey(const Key('open-inbox')),
     );
     await pumpUi(tester);
     expect((await items.getItemById(item.id))!.channelId, isNull);
+    await tester.tap(find.byKey(const Key('open-inbox')));
+    await pumpUi(tester);
+    await tester.tap(find.byKey(Key('item-preview-${item.id}')));
+    await pumpUi(tester);
+    expect(find.byKey(const Key('move-item-button')), findsOneWidget);
     await disposeApp(tester);
   });
 

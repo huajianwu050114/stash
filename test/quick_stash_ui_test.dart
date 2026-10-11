@@ -12,6 +12,7 @@ import 'package:stash/app/providers.dart';
 import 'package:stash/core/database/app_database.dart';
 import 'package:stash/features/attachments/data/attachment_repository.dart';
 import 'package:stash/features/attachments/data/image_import_sources.dart';
+import 'package:stash/features/attachments/presentation/image_drop_region.dart';
 import 'package:stash/features/quick_stash/application/quick_stash_controller.dart';
 import 'package:stash/features/quick_stash/application/quick_stash_settings_controller.dart';
 import 'package:stash/features/quick_stash/data/quick_stash_settings_repository.dart';
@@ -174,6 +175,27 @@ void main() {
 
     expect((await db.select(db.items).get()).single.content, 'hello world!');
     expect(window.hideCalls, 1);
+  });
+
+  testWidgets('dropped text inserts at the caret and keeps Quick focused', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    enterQuickText(tester, 'hello world');
+    final editor = quickEditor(tester);
+    editor.controller.updateSelection(
+      const TextSelection.collapsed(offset: 5),
+      ChangeSource.local,
+    );
+    final dropRegion = tester.widget<ImageDropRegion>(
+      find.byKey(const Key('quick-image-drop-region')),
+    );
+
+    await Future<void>.sync(() => dropRegion.onTextDropped!(' dropped'));
+    await pumpUi(tester);
+
+    expect(quickDocument(tester).toPlainText(), 'hello dropped world\n');
+    expect(editor.focusNode.hasFocus, isTrue);
   });
 
   testWidgets('image paste restores focus and preserves the embed caret', (

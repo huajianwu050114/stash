@@ -38,6 +38,7 @@ class _ItemEditorScreenState extends ConsumerState<ItemEditorScreen> {
 
   late final String _itemId;
   late final QuillController _documentController;
+  late final FocusNode _documentFocusNode;
   late final TextEditingController _titleController;
   late final TextEditingController _noteController;
   late final TextEditingController _tagsController;
@@ -61,6 +62,7 @@ class _ItemEditorScreenState extends ConsumerState<ItemEditorScreen> {
     _imageIngestor = ImageAttachmentIngestor(_attachments);
     _clipboard = ref.read(clipboardReaderProvider);
     _imagePicker = ref.read(imagePickerProvider);
+    _documentFocusNode = FocusNode(debugLabel: 'item-document');
     final document = _codec.decode(
       documentJson: item?.documentJson,
       legacyText: item?.content ?? '',
@@ -85,6 +87,7 @@ class _ItemEditorScreenState extends ConsumerState<ItemEditorScreen> {
     _documentController
       ..removeListener(_documentChanged)
       ..dispose();
+    _documentFocusNode.dispose();
     _titleController.dispose();
     _noteController.dispose();
     _tagsController.dispose();
@@ -246,13 +249,25 @@ class _ItemEditorScreenState extends ConsumerState<ItemEditorScreen> {
     );
   }
 
+  void _handleDroppedText(String text) {
+    _insertText(text);
+    _documentFocusNode.requestFocus();
+  }
+
   void _insertText(String text) {
     final selection = _documentController.selection;
-    final index = selection.start < 0 ? 0 : selection.start;
-    final length = selection.end < 0 ? 0 : selection.end - index;
+    final documentEnd = _documentController.document.length - 1;
+    final index = (selection.isValid ? selection.start : documentEnd).clamp(
+      0,
+      documentEnd,
+    );
+    final end = (selection.isValid ? selection.end : index).clamp(
+      index,
+      documentEnd,
+    );
     _documentController.replaceText(
       index,
-      length,
+      end - index,
       text,
       TextSelection.collapsed(offset: index + text.length),
     );
@@ -372,10 +387,12 @@ class _ItemEditorScreenState extends ConsumerState<ItemEditorScreen> {
                   ImageDropRegion(
                     key: const Key('full-editor-image-drop-region'),
                     onImagesDropped: _importAndInsertImages,
+                    onTextDropped: _handleDroppedText,
                     onError: _showDropError,
                     child: QuillEditor.basic(
                       key: const Key('content-field'),
                       controller: _documentController,
+                      focusNode: _documentFocusNode,
                       config: QuillEditorConfig(
                         scrollable: false,
                         autoFocus: !widget.isEditing,

@@ -12,6 +12,7 @@ import '../data/item_document_codec.dart';
 import '../domain/item.dart';
 import '../../quick_stash/presentation/quick_stash_settings_screen.dart';
 import 'item_detail_screen.dart';
+import 'item_drag_drop.dart';
 import 'item_editor_screen.dart';
 
 enum _ViewKind { inbox, pinned, channel }
@@ -864,64 +865,22 @@ class _ChannelTile extends StatelessWidget {
   );
 }
 
-class _ItemDragData {
-  const _ItemDragData({required this.itemId, required this.sourceChannelId});
-
-  final String itemId;
-  final String? sourceChannelId;
-}
-
-class _ItemDropTarget extends ConsumerStatefulWidget {
+class _ItemDropTarget extends ConsumerWidget {
   const _ItemDropTarget({required this.channelId, required this.child});
 
   final String? channelId;
   final Widget child;
 
   @override
-  ConsumerState<_ItemDropTarget> createState() => _ItemDropTargetState();
-}
-
-class _ItemDropTargetState extends ConsumerState<_ItemDropTarget> {
-  bool _hovered = false;
-
-  bool _canAccept(_ItemDragData? data) =>
-      data != null && data.sourceChannelId != widget.channelId;
-
-  Future<void> _move(_ItemDragData data) async {
-    setState(() => _hovered = false);
-    try {
-      await ref
-          .read(itemRepositoryProvider)
-          .moveItem(data.itemId, channelId: widget.channelId);
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not move this item.')),
-      );
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) => DragTarget<_ItemDragData>(
-    onWillAcceptWithDetails: (details) {
-      final accepted = _canAccept(details.data);
-      if (_hovered != accepted) setState(() => _hovered = accepted);
-      return accepted;
-    },
-    onLeave: (_) {
-      if (_hovered) setState(() => _hovered = false);
-    },
-    onAcceptWithDetails: (details) => unawaited(_move(details.data)),
-    builder: (context, _, _) => AnimatedContainer(
-      duration: const Duration(milliseconds: 120),
-      decoration: BoxDecoration(
-        color: _hovered
-            ? Theme.of(context).colorScheme.primaryContainer
-            : Colors.transparent,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: widget.child,
-    ),
+  Widget build(BuildContext context, WidgetRef ref) => StashItemDropTarget(
+    channelId: channelId,
+    onMove: (data) => ref
+        .read(itemRepositoryProvider)
+        .moveItem(data.itemId, channelId: channelId),
+    onError: () => ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Could not move this item.'))),
+    child: child,
   );
 }
 
@@ -1008,7 +967,7 @@ class _ItemPreview extends StatelessWidget {
     final title = item.title?.trim();
     final desktop = MediaQuery.sizeOf(context).width >= 900;
     final imageAttachmentIds = _imageAttachmentIds;
-    return InkWell(
+    final preview = InkWell(
       key: Key('item-preview-${item.id}'),
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute<void>(
@@ -1020,45 +979,6 @@ class _ItemPreview extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (desktop) ...[
-              Draggable<_ItemDragData>(
-                data: _ItemDragData(
-                  itemId: item.id,
-                  sourceChannelId: item.channelId,
-                ),
-                feedback: Material(
-                  elevation: 4,
-                  borderRadius: BorderRadius.circular(10),
-                  child: Container(
-                    constraints: const BoxConstraints(maxWidth: 280),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 10,
-                    ),
-                    child: Text(
-                      title?.isNotEmpty == true ? title! : item.content,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ),
-                childWhenDragging: const SizedBox(
-                  width: 32,
-                  height: 32,
-                  child: Icon(Icons.drag_indicator_rounded, color: Colors.grey),
-                ),
-                child: Tooltip(
-                  message: 'Drag to a channel',
-                  child: SizedBox(
-                    key: Key('item-drag-handle-${item.id}'),
-                    width: 32,
-                    height: 32,
-                    child: const Icon(Icons.drag_indicator_rounded, size: 19),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-            ],
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1105,6 +1025,7 @@ class _ItemPreview extends StatelessWidget {
         ),
       ),
     );
+    return desktop ? StashItemDragSource(item: item, child: preview) : preview;
   }
 }
 

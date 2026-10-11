@@ -12,6 +12,7 @@ import 'package:stash/app/providers.dart';
 import 'package:stash/core/database/app_database.dart';
 import 'package:stash/features/attachments/data/attachment_repository.dart';
 import 'package:stash/features/attachments/data/image_import_sources.dart';
+import 'package:stash/features/attachments/presentation/image_drop_region.dart';
 import 'package:stash/features/items/data/item_document_codec.dart';
 
 import 'test_database.dart';
@@ -206,6 +207,37 @@ void main() {
       editor.controller.document.toPlainText(),
       contains('pasted normally'),
     );
+    await disposeApp(tester);
+  });
+
+  testWidgets('dropped text inserts at the caret and focuses the editor', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    await tester.tap(find.byKey(const Key('new-item-button')));
+    await pumpUi(tester);
+    final editor = tester.widget<QuillEditor>(
+      find.byKey(const Key('content-field')),
+    );
+    editor.controller.replaceText(
+      0,
+      editor.controller.document.length - 1,
+      'hello world',
+      const TextSelection.collapsed(offset: 11),
+    );
+    editor.controller.updateSelection(
+      const TextSelection.collapsed(offset: 5),
+      ChangeSource.local,
+    );
+    final dropRegion = tester.widget<ImageDropRegion>(
+      find.byKey(const Key('full-editor-image-drop-region')),
+    );
+
+    await Future<void>.sync(() => dropRegion.onTextDropped!(' dropped'));
+    await tester.pump();
+
+    expect(editor.controller.document.toPlainText(), 'hello dropped world\n');
+    expect(editor.focusNode.hasFocus, isTrue);
     await disposeApp(tester);
   });
 }

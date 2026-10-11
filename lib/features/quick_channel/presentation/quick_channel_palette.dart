@@ -8,6 +8,7 @@ import '../../attachments/data/attachment_repository.dart';
 import '../../attachments/presentation/stash_image_drag_source.dart';
 import '../../items/data/item_document_codec.dart';
 import '../../items/domain/item.dart';
+import '../../items/presentation/item_drag_drop.dart';
 
 class QuickChannelPalette extends ConsumerWidget {
   const QuickChannelPalette({super.key, required this.channelId});
@@ -259,21 +260,27 @@ class _PaletteContentsState extends ConsumerState<_PaletteContents> {
                 itemBuilder: (context, index) {
                   final item = partition.textItems[index];
                   final title = item.title?.trim();
-                  return ListTile(
-                    key: Key('quick-channel-text-${item.id}'),
-                    dense: true,
-                    title: Text(
-                      title == null || title.isEmpty ? item.content : title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+                  return StashTextDragSource(
+                    key: Key('quick-channel-text-drag-${item.id}'),
+                    text: item.content.trim().isEmpty
+                        ? title ?? ''
+                        : item.content,
+                    child: ListTile(
+                      key: Key('quick-channel-text-${item.id}'),
+                      dense: true,
+                      title: Text(
+                        title == null || title.isEmpty ? item.content : title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: title == null || title.isEmpty
+                          ? null
+                          : Text(
+                              item.content,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                     ),
-                    subtitle: title == null || title.isEmpty
-                        ? null
-                        : Text(
-                            item.content,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
                   );
                 },
               ),

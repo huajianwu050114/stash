@@ -279,6 +279,8 @@ class _QuickStashScreenState extends ConsumerState<QuickStashScreen> {
     await _importAndInsertImages(images, insertionSelection: selection);
   }
 
+  void _handleDroppedText(String text) => _insertText(text);
+
   void _showDropError() {
     if (mounted) setState(() => _message = 'Could not import dropped image.');
   }
@@ -430,6 +432,7 @@ class _QuickStashScreenState extends ConsumerState<QuickStashScreen> {
                       builder: (context, constraints) => ImageDropRegion(
                         key: const Key('quick-image-drop-region'),
                         onImagesDropped: _handleDroppedImages,
+                        onTextDropped: _handleDroppedText,
                         onError: _showDropError,
                         child: Listener(
                           key: const Key('quick-editor-surface'),

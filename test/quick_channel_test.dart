@@ -248,6 +248,10 @@ void main() {
       find.byKey(const Key('quick-channel-text-text-item')),
       findsOneWidget,
     );
+    expect(
+      find.byKey(const Key('quick-channel-text-drag-text-item')),
+      findsOneWidget,
+    );
     expect(find.text('Thanks!'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(Duration.zero);
