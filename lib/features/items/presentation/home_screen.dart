@@ -72,8 +72,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ref.watch(desktopSidebarCollapsedProvider).value ?? false;
       return Scaffold(
         appBar: AppBar(
-          toolbarHeight: wide ? 52 : 64,
-          titleSpacing: wide ? 20 : 24,
+          toolbarHeight: wide ? 48 : 60,
+          titleSpacing: wide ? 16 : 20,
           title: Text(
             'Stash',
             style: Theme.of(context).textTheme.titleLarge
@@ -129,7 +129,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   children: [
                     SizedBox(
                       key: const Key('desktop-sidebar'),
-                      width: sidebarCollapsed ? 56 : 224,
+                      width: sidebarCollapsed ? 56 : 216,
                       child: _RootPane(
                         compact: true,
                         collapsed: sidebarCollapsed,
@@ -221,12 +221,7 @@ class _RootPane extends ConsumerWidget {
     }
     return ListView(
       key: const Key('root-browser'),
-      padding: EdgeInsets.fromLTRB(
-        compact ? 12 : 24,
-        12,
-        compact ? 12 : 24,
-        48,
-      ),
+      padding: EdgeInsets.fromLTRB(compact ? 10 : 20, 8, compact ? 10 : 20, 32),
       children: [
         if (compact)
           Align(
@@ -257,7 +252,7 @@ class _RootPane extends ConsumerWidget {
           selected: selectedKind == _ViewKind.pinned,
           onTap: () => onSpecial(_ViewKind.pinned),
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 18),
         Row(
           children: [
             Expanded(
@@ -308,7 +303,7 @@ class _RootPane extends ConsumerWidget {
           error: (_, _) => const Text('Channels could not be loaded.'),
         ),
         if (compact) ...[
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
           const Divider(height: 1),
           const SizedBox(height: 8),
           ListTile(
@@ -323,7 +318,7 @@ class _RootPane extends ConsumerWidget {
           ),
         ],
         if (!compact) ...[
-          const SizedBox(height: 28),
+          const SizedBox(height: 20),
           inbox.when(
             data: (items) => _RootInboxSections(items: items),
             loading: () => const Center(child: CircularProgressIndicator()),
@@ -683,7 +678,7 @@ class _ChannelPane extends ConsumerWidget {
                             )
                           : const SizedBox(height: 24)
                     : Padding(
-                        padding: const EdgeInsets.only(top: 28),
+                        padding: const EdgeInsets.only(top: 20),
                         child: _ItemSection(title: 'Items', items: values),
                       ),
                 loading: () => const Center(child: CircularProgressIndicator()),
@@ -718,13 +713,13 @@ class _ContentFrame extends StatelessWidget {
     child: ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 1080),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (breadcrumbs != null) ...[
               breadcrumbs!,
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
             ],
             Wrap(
               spacing: 10,
@@ -739,7 +734,7 @@ class _ContentFrame extends StatelessWidget {
                 ...actions,
               ],
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 10),
             Expanded(child: child),
           ],
         ),
@@ -899,7 +894,7 @@ class _EmptyItems extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 32),
+    padding: const EdgeInsets.symmetric(vertical: 24),
     child: Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -913,7 +908,7 @@ class _EmptyItems extends StatelessWidget {
           ),
         ),
         if (actionLabel != null && onAdd != null) ...[
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
           FilledButton.icon(
             key: const Key('empty-add-item'),
             onPressed: onAdd,

@@ -94,6 +94,7 @@ ThemeData _theme(Brightness brightness) {
   );
   return ThemeData(
     useMaterial3: true,
+    visualDensity: const VisualDensity(horizontal: -1, vertical: -1),
     brightness: brightness,
     colorScheme: scheme,
     scaffoldBackgroundColor: scheme.surface,

@@ -117,7 +117,7 @@ class _ItemDetail extends ConsumerWidget {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 760),
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(24, 16, 24, 48),
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
               children: [
                 if (title != null && title.isNotEmpty) ...[
                   Text(

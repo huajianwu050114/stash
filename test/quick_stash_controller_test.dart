@@ -82,7 +82,7 @@ void main() {
 
       expect(controller.surface, StashSurface.quickChannel);
       expect(controller.quickChannelId, 'memes');
-      expect(window.calls, ['showQuick']);
+      expect(window.calls, ['showQuickChannel']);
 
       window.calls.clear();
       await controller.toggleQuickChannel('memes');
@@ -99,7 +99,7 @@ void main() {
     await controller.toggleQuickChannel('second');
 
     expect(controller.quickChannelId, 'second');
-    expect(window.calls, ['showQuick']);
+    expect(window.calls, ['showQuickChannel']);
   });
 
   test(
@@ -157,6 +157,14 @@ class _FakeWindow implements DesktopWindowService {
       failNextQuickShow = false;
       throw StateError('window failed');
     }
+    visible = true;
+    focused = true;
+    emitFocus(true);
+  }
+
+  @override
+  Future<void> showQuickChannel() async {
+    calls.add('showQuickChannel');
     visible = true;
     focused = true;
     emitFocus(true);

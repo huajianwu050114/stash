@@ -192,6 +192,9 @@ class _FakeWindow implements DesktopWindowService {
   Future<void> showQuick() async {}
 
   @override
+  Future<void> showQuickChannel() async {}
+
+  @override
   Future<void> hideQuick() async {}
 
   @override

@@ -92,7 +92,7 @@ class _QuickStashSettingsScreenState
           child: ListenableBuilder(
             listenable: Listenable.merge([settings, quickChannels]),
             builder: (context, _) => ListView(
-              padding: const EdgeInsets.fromLTRB(24, 16, 24, 48),
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
               children: [
                 Text(
                   'Appearance',

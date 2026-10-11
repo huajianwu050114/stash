@@ -72,9 +72,9 @@ class _PaletteHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => SizedBox(
-    height: 52,
+    height: 48,
     child: Padding(
-      padding: const EdgeInsets.only(left: 16, right: 8),
+      padding: const EdgeInsets.only(left: 14, right: 6),
       child: Row(
         children: [
           Icon(

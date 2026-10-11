@@ -93,7 +93,7 @@ class QuickStashController extends ChangeNotifier {
       _quickChannelId = channelId;
       notifyListeners();
     }
-    await _window.showQuick();
+    await _window.showQuickChannel();
   }
 
   Future<void> hideQuick() async {

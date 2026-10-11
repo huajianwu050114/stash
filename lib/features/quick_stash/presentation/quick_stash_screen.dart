@@ -392,7 +392,7 @@ class _QuickStashScreenState extends ConsumerState<QuickStashScreen> {
         return Scaffold(
           body: SafeArea(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [

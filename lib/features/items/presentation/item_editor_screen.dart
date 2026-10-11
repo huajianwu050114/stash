@@ -310,7 +310,7 @@ class _ItemEditorScreenState extends ConsumerState<ItemEditorScreen> {
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 780),
               child: ListView(
-                padding: const EdgeInsets.fromLTRB(28, 12, 28, 56),
+                padding: const EdgeInsets.fromLTRB(20, 10, 20, 36),
                 children: [
                   TextField(
                     key: const Key('title-field'),

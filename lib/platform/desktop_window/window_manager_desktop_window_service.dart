@@ -9,8 +9,9 @@ import 'desktop_window_service.dart';
 class WindowManagerDesktopWindowService
     with WindowListener
     implements DesktopWindowService {
-  static const double quickWidth = 420;
-  static const Size fullSize = Size(1100, 760);
+  static const Size fullSize = Size(960, 660);
+  static const Size quickSize = Size(410, 600);
+  static const Size quickChannelSize = Size(410, 500);
 
   final Set<WindowFocusListener> _focusListeners = {};
   bool _listening = false;
@@ -69,16 +70,19 @@ class WindowManagerDesktopWindowService
   void onWindowBlur() => _notifyFocusListeners(false);
 
   @override
-  Future<void> showQuick() async {
+  Future<void> showQuick() => _showCompact(quickSize);
+
+  @override
+  Future<void> showQuickChannel() => _showCompact(quickChannelSize);
+
+  Future<void> _showCompact(Size desiredSize) async {
     final display = await _activeDisplay();
     final origin = display.visiblePosition ?? Offset.zero;
     final size = display.visibleSize ?? display.size;
-    final width = quickWidth.clamp(320, size.width).toDouble();
-    final bounds = Rect.fromLTWH(
-      origin.dx + size.width - width,
-      origin.dy,
-      width,
-      size.height,
+    final bounds = compactBoundsFor(
+      visibleOrigin: origin,
+      visibleSize: size,
+      desiredSize: desiredSize,
     );
     await windowManager.setTitleBarStyle(
       TitleBarStyle.hidden,
@@ -90,6 +94,21 @@ class WindowManagerDesktopWindowService
     await windowManager.setBounds(bounds);
     await windowManager.show();
     await windowManager.focus();
+  }
+
+  static Rect compactBoundsFor({
+    required Offset visibleOrigin,
+    required Size visibleSize,
+    required Size desiredSize,
+  }) {
+    final width = desiredSize.width.clamp(320, visibleSize.width).toDouble();
+    final height = desiredSize.height.clamp(360, visibleSize.height).toDouble();
+    return Rect.fromLTWH(
+      visibleOrigin.dx + visibleSize.width - width,
+      visibleOrigin.dy + (visibleSize.height - height) / 2,
+      width,
+      height,
+    );
   }
 
   @override

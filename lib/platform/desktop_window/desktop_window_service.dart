@@ -18,6 +18,8 @@ abstract interface class DesktopWindowService {
 
   Future<void> showQuick();
 
+  Future<void> showQuickChannel();
+
   Future<void> hideQuick();
 
   Future<void> showFull();
@@ -57,6 +59,9 @@ class NoopDesktopWindowService implements DesktopWindowService {
 
   @override
   Future<void> showQuick() async {}
+
+  @override
+  Future<void> showQuickChannel() async {}
 
   @override
   Future<void> hideQuick() async {}

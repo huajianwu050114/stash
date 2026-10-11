@@ -115,6 +115,9 @@ class _FakeWindow implements DesktopWindowService {
   Future<void> showQuick() async => log.add('window.showQuick');
 
   @override
+  Future<void> showQuickChannel() async => log.add('window.showQuickChannel');
+
+  @override
   Future<void> hideQuick() => hide();
 
   @override

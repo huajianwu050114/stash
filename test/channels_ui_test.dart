@@ -220,7 +220,7 @@ void main() {
       shellPreferences: preferences,
     );
 
-    expect(tester.getSize(find.byKey(const Key('desktop-sidebar'))).width, 224);
+    expect(tester.getSize(find.byKey(const Key('desktop-sidebar'))).width, 216);
     await tester.tap(find.byKey(const Key('collapse-sidebar')));
     await pumpUi(tester);
 
@@ -240,7 +240,7 @@ void main() {
 
     await tester.tap(find.byKey(const Key('expand-sidebar')));
     await pumpUi(tester);
-    expect(tester.getSize(find.byKey(const Key('desktop-sidebar'))).width, 224);
+    expect(tester.getSize(find.byKey(const Key('desktop-sidebar'))).width, 216);
     await disposeApp(tester);
   });
 
