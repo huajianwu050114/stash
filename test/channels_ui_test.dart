@@ -3,6 +3,7 @@ import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stash/app/app.dart';
+import 'package:stash/app/desktop_shell_preferences.dart';
 import 'package:stash/app/providers.dart';
 import 'package:stash/core/database/app_database.dart';
 import 'package:stash/features/channels/data/channel_repository.dart';
@@ -21,7 +22,11 @@ void main() {
     items = ItemRepository(db);
   });
 
-  Future<void> pumpApp(WidgetTester tester, {Size? size}) async {
+  Future<void> pumpApp(
+    WidgetTester tester, {
+    Size? size,
+    DesktopShellPreferences? shellPreferences,
+  }) async {
     if (size != null) {
       tester.view.physicalSize = size;
       tester.view.devicePixelRatio = 1;
@@ -30,7 +35,13 @@ void main() {
     }
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [databaseProvider.overrideWithValue(db)],
+        overrides: [
+          databaseProvider.overrideWithValue(db),
+          if (shellPreferences != null)
+            desktopShellPreferencesRepositoryProvider.overrideWithValue(
+              DesktopShellPreferencesRepository(shellPreferences),
+            ),
+        ],
         child: const StashApp(),
       ),
     );
@@ -162,6 +173,44 @@ void main() {
     await disposeApp(tester);
   });
 
+  testWidgets('desktop sidebar collapses, keeps navigation, and persists', (
+    tester,
+  ) async {
+    final preferences = _MemoryDesktopShellPreferences();
+    final channel = await channels.createRootChannel(
+      id: 'compact',
+      name: 'Compact',
+    );
+    await pumpApp(
+      tester,
+      size: const Size(1200, 800),
+      shellPreferences: preferences,
+    );
+
+    expect(tester.getSize(find.byKey(const Key('desktop-sidebar'))).width, 224);
+    await tester.tap(find.byKey(const Key('collapse-sidebar')));
+    await pumpUi(tester);
+
+    expect(find.byKey(const Key('collapsed-root-browser')), findsOneWidget);
+    expect(tester.getSize(find.byKey(const Key('desktop-sidebar'))).width, 56);
+    expect(find.byKey(Key('channel-${channel.id}')), findsOneWidget);
+    expect(await preferences.getBool('desktop_sidebar_collapsed'), isTrue);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+    await pumpApp(
+      tester,
+      size: const Size(1200, 800),
+      shellPreferences: preferences,
+    );
+    expect(find.byKey(const Key('collapsed-root-browser')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('expand-sidebar')));
+    await pumpUi(tester);
+    expect(tester.getSize(find.byKey(const Key('desktop-sidebar'))).width, 224);
+    await disposeApp(tester);
+  });
+
   testWidgets(
     'channel deletion refuses content and hides tombstoned channels',
     (tester) async {
@@ -195,6 +244,18 @@ void main() {
       await disposeApp(tester);
     },
   );
+}
+
+class _MemoryDesktopShellPreferences implements DesktopShellPreferences {
+  final Map<String, bool> values = {};
+
+  @override
+  Future<bool?> getBool(String key) async => values[key];
+
+  @override
+  Future<void> setBool(String key, bool value) async {
+    values[key] = value;
+  }
 }
 
 Future<void> pumpUi(WidgetTester tester) async {

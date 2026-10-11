@@ -16,6 +16,7 @@ import '../features/quick_stash/data/quick_stash_settings_repository.dart';
 import '../platform/desktop_window/desktop_window_service.dart';
 import '../platform/global_hotkey/global_hotkey_service.dart';
 import 'appearance.dart';
+import 'desktop_shell_preferences.dart';
 
 /// The single on-device SQLite database. The database is the source of
 /// truth; no additional in-memory copy of items is kept anywhere.
@@ -87,6 +88,32 @@ final appearanceProvider =
     AsyncNotifierProvider<AppearanceController, ThemeMode>(
       AppearanceController.new,
     );
+
+final desktopShellPreferencesRepositoryProvider =
+    Provider<DesktopShellPreferencesRepository>(
+      (ref) => DesktopShellPreferencesRepository(
+        SharedPreferencesDesktopShellPreferences(),
+      ),
+    );
+
+final desktopSidebarCollapsedProvider =
+    AsyncNotifierProvider<DesktopSidebarController, bool>(
+      DesktopSidebarController.new,
+    );
+
+class DesktopSidebarController extends AsyncNotifier<bool> {
+  @override
+  Future<bool> build() => ref
+      .watch(desktopShellPreferencesRepositoryProvider)
+      .loadSidebarCollapsed();
+
+  Future<void> setCollapsed(bool collapsed) async {
+    state = AsyncData(collapsed);
+    await ref
+        .read(desktopShellPreferencesRepositoryProvider)
+        .saveSidebarCollapsed(collapsed);
+  }
+}
 
 class AppearanceController extends AsyncNotifier<ThemeMode> {
   @override

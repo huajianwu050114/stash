@@ -52,18 +52,26 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
   }
 
+  void _openSettings(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const QuickStashSettingsScreen()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
       final wide = constraints.maxWidth >= 900;
+      final sidebarCollapsed =
+          ref.watch(desktopSidebarCollapsedProvider).value ?? false;
       return Scaffold(
         appBar: AppBar(
-          toolbarHeight: 72,
-          titleSpacing: 24,
+          toolbarHeight: wide ? 52 : 64,
+          titleSpacing: wide ? 20 : 24,
           title: Text(
             'Stash',
-            style: Theme.of(context).textTheme.headlineMedium
-                ?.copyWith(fontWeight: FontWeight.w700, letterSpacing: -0.6),
+            style: Theme.of(context).textTheme.titleLarge
+                ?.copyWith(fontWeight: FontWeight.w700, letterSpacing: -0.3),
           ),
           actions: [
             PopupMenuButton<ThemeMode>(
@@ -90,23 +98,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ),
               ],
             ),
-            IconButton(
-              key: const Key('settings-button'),
-              tooltip: 'Settings',
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => const QuickStashSettingsScreen(),
-                ),
+            if (!wide)
+              IconButton(
+                key: const Key('settings-button'),
+                tooltip: 'Settings',
+                onPressed: () => _openSettings(context),
+                icon: const Icon(Icons.settings_outlined),
               ),
-              icon: const Icon(Icons.settings_outlined),
-            ),
-            FilledButton.icon(
+            FilledButton.tonalIcon(
               key: const Key('new-item-button'),
               onPressed: () => _createItem(context, null),
-              icon: const Icon(Icons.add_rounded),
-              label: const Text('Add item'),
+              icon: const Icon(Icons.add_rounded, size: 19),
+              label: Text(wide ? 'New' : 'Add item'),
             ),
-            const SizedBox(width: 16),
+            SizedBox(width: wide ? 12 : 16),
           ],
         ),
         body: SafeArea(
@@ -117,14 +122,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     SizedBox(
-                      width: 300,
+                      key: const Key('desktop-sidebar'),
+                      width: sidebarCollapsed ? 56 : 224,
                       child: _RootPane(
                         compact: true,
+                        collapsed: sidebarCollapsed,
                         selectedKind: _selectedKind,
                         selectedChannelId: _selectedChannelId,
                         onSpecial: (kind) => _openSpecial(context, kind, true),
                         onChannel: (channel) =>
                             _openChannel(context, channel, true),
+                        onSettings: () => _openSettings(context),
+                        onToggleCollapsed: () => ref
+                            .read(desktopSidebarCollapsedProvider.notifier)
+                            .setCollapsed(!sidebarCollapsed),
                       ),
                     ),
                     const VerticalDivider(width: 1),
@@ -153,10 +164,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 )
               : _RootPane(
                   compact: false,
+                  collapsed: false,
                   selectedKind: null,
                   selectedChannelId: null,
                   onSpecial: (kind) => _openSpecial(context, kind, false),
                   onChannel: (channel) => _openChannel(context, channel, false),
+                  onSettings: () => _openSettings(context),
                 ),
         ),
       );
@@ -167,22 +180,39 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 class _RootPane extends ConsumerWidget {
   const _RootPane({
     required this.compact,
+    required this.collapsed,
     required this.selectedKind,
     required this.selectedChannelId,
     required this.onSpecial,
     required this.onChannel,
+    required this.onSettings,
+    this.onToggleCollapsed,
   });
 
   final bool compact;
+  final bool collapsed;
   final _ViewKind? selectedKind;
   final String? selectedChannelId;
   final ValueChanged<_ViewKind> onSpecial;
   final ValueChanged<Channel> onChannel;
+  final VoidCallback onSettings;
+  final VoidCallback? onToggleCollapsed;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final channels = ref.watch(rootChannelsProvider);
     final inbox = ref.watch(inboxItemsProvider);
+    if (collapsed) {
+      return _CollapsedRootPane(
+        channels: channels,
+        selectedKind: selectedKind,
+        selectedChannelId: selectedChannelId,
+        onSpecial: onSpecial,
+        onChannel: onChannel,
+        onSettings: onSettings,
+        onExpand: onToggleCollapsed!,
+      );
+    }
     return ListView(
       key: const Key('root-browser'),
       padding: EdgeInsets.fromLTRB(
@@ -192,6 +222,16 @@ class _RootPane extends ConsumerWidget {
         48,
       ),
       children: [
+        if (compact)
+          Align(
+            alignment: Alignment.centerRight,
+            child: IconButton(
+              key: const Key('collapse-sidebar'),
+              tooltip: 'Collapse sidebar',
+              onPressed: onToggleCollapsed,
+              icon: const Icon(Icons.chevron_left_rounded, size: 22),
+            ),
+          ),
         _LocationTile(
           key: const Key('open-inbox'),
           icon: Icons.inbox_outlined,
@@ -220,12 +260,20 @@ class _RootPane extends ConsumerWidget {
                 ),
               ),
             ),
-            TextButton.icon(
-              key: const Key('new-root-channel'),
-              onPressed: () => _createChannel(context, ref, null),
-              icon: const Icon(Icons.create_new_folder_outlined, size: 18),
-              label: const Text('New channel'),
-            ),
+            if (compact)
+              IconButton(
+                key: const Key('new-root-channel'),
+                tooltip: 'New channel',
+                onPressed: () => _createChannel(context, ref, null),
+                icon: const Icon(Icons.create_new_folder_outlined, size: 19),
+              )
+            else
+              TextButton.icon(
+                key: const Key('new-root-channel'),
+                onPressed: () => _createChannel(context, ref, null),
+                icon: const Icon(Icons.create_new_folder_outlined, size: 18),
+                label: const Text('New channel'),
+              ),
           ],
         ),
         channels.when(
@@ -250,6 +298,21 @@ class _RootPane extends ConsumerWidget {
           loading: () => const LinearProgressIndicator(),
           error: (_, _) => const Text('Channels could not be loaded.'),
         ),
+        if (compact) ...[
+          const SizedBox(height: 20),
+          const Divider(height: 1),
+          const SizedBox(height: 8),
+          ListTile(
+            key: const Key('sidebar-settings'),
+            dense: true,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+            leading: const Icon(Icons.settings_outlined, size: 20),
+            title: const Text('Settings'),
+            onTap: onSettings,
+          ),
+        ],
         if (!compact) ...[
           const SizedBox(height: 28),
           inbox.when(
@@ -261,6 +324,142 @@ class _RootPane extends ConsumerWidget {
       ],
     );
   }
+}
+
+class _CollapsedRootPane extends StatelessWidget {
+  const _CollapsedRootPane({
+    required this.channels,
+    required this.selectedKind,
+    required this.selectedChannelId,
+    required this.onSpecial,
+    required this.onChannel,
+    required this.onSettings,
+    required this.onExpand,
+  });
+
+  final AsyncValue<List<Channel>> channels;
+  final _ViewKind? selectedKind;
+  final String? selectedChannelId;
+  final ValueChanged<_ViewKind> onSpecial;
+  final ValueChanged<Channel> onChannel;
+  final VoidCallback onSettings;
+  final VoidCallback onExpand;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    children: [
+      const SizedBox(height: 4),
+      IconButton(
+        key: const Key('expand-sidebar'),
+        tooltip: 'Expand sidebar',
+        onPressed: onExpand,
+        icon: const Icon(Icons.chevron_right_rounded, size: 22),
+      ),
+      const Divider(height: 9, indent: 8, endIndent: 8),
+      Expanded(
+        child: ListView(
+          key: const Key('collapsed-root-browser'),
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          children: [
+            _SidebarIconButton(
+              key: const Key('open-inbox'),
+              icon: Icons.inbox_outlined,
+              tooltip: 'Inbox',
+              selected: selectedKind == _ViewKind.inbox,
+              onTap: () => onSpecial(_ViewKind.inbox),
+            ),
+            _SidebarIconButton(
+              key: const Key('open-pinned'),
+              icon: Icons.push_pin_outlined,
+              tooltip: 'Pinned',
+              selected: selectedKind == _ViewKind.pinned,
+              onTap: () => onSpecial(_ViewKind.pinned),
+            ),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+              child: Divider(height: 1),
+            ),
+            ...channels.when(
+              data: (values) => [
+                for (final channel in values)
+                  _SidebarIconButton(
+                    key: Key('channel-${channel.id}'),
+                    icon: Icons.folder_outlined,
+                    tooltip: channel.name,
+                    selected: selectedChannelId == channel.id,
+                    onTap: () => onChannel(channel),
+                  ),
+              ],
+              loading: () => const [
+                Padding(
+                  padding: EdgeInsets.all(12),
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ],
+              error: (_, _) => const [
+                Tooltip(
+                  message: 'Channels could not be loaded',
+                  child: Icon(Icons.error_outline, size: 20),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+      const Divider(height: 1, indent: 8, endIndent: 8),
+      _SidebarIconButton(
+        key: const Key('sidebar-settings'),
+        icon: Icons.settings_outlined,
+        tooltip: 'Settings',
+        selected: false,
+        onTap: onSettings,
+      ),
+      const SizedBox(height: 6),
+    ],
+  );
+}
+
+class _SidebarIconButton extends StatelessWidget {
+  const _SidebarIconButton({
+    super.key,
+    required this.icon,
+    required this.tooltip,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 2),
+    child: Tooltip(
+      message: tooltip,
+      child: Material(
+        color: selected
+            ? Theme.of(context).colorScheme.secondaryContainer
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: onTap,
+          child: SizedBox(
+            height: 42,
+            child: Icon(
+              icon,
+              size: 20,
+              color: selected
+                  ? Theme.of(context).colorScheme.onSecondaryContainer
+                  : Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
 }
 
 class _RootInboxSections extends StatelessWidget {
@@ -499,11 +698,12 @@ class _ContentFrame extends StatelessWidget {
   final Widget? breadcrumbs;
 
   @override
-  Widget build(BuildContext context) => Center(
+  Widget build(BuildContext context) => Align(
+    alignment: Alignment.topCenter,
     child: ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 880),
+      constraints: const BoxConstraints(maxWidth: 1080),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(24, 16, 24, 48),
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -518,13 +718,13 @@ class _ContentFrame extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: Theme.of(context).textTheme.headlineSmall
+                  style: Theme.of(context).textTheme.titleLarge
                       ?.copyWith(fontWeight: FontWeight.w700),
                 ),
                 ...actions,
               ],
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 14),
             Expanded(child: child),
           ],
         ),
@@ -576,9 +776,16 @@ class _ChannelSection extends StatelessWidget {
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
       Text('Channels', style: Theme.of(context).textTheme.titleSmall),
-      const SizedBox(height: 8),
+      const SizedBox(height: 6),
       for (final channel in channels)
-        _ChannelTile(channel: channel, onTap: () => onOpen(channel)),
+        Padding(
+          padding: const EdgeInsets.only(left: 10),
+          child: _ChannelTile(
+            channel: channel,
+            nested: true,
+            onTap: () => onOpen(channel),
+          ),
+        ),
     ],
   );
 }
@@ -616,10 +823,12 @@ class _ChannelTile extends StatelessWidget {
     required this.channel,
     required this.onTap,
     this.selected = false,
+    this.nested = false,
   });
   final Channel channel;
   final VoidCallback onTap;
   final bool selected;
+  final bool nested;
 
   @override
   Widget build(BuildContext context) => ListTile(
@@ -627,10 +836,13 @@ class _ChannelTile extends StatelessWidget {
     dense: true,
     selected: selected,
     selectedTileColor: Theme.of(context).colorScheme.secondaryContainer,
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-    leading: const Icon(Icons.folder_outlined),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+    leading: Icon(
+      nested ? Icons.subdirectory_arrow_right_rounded : Icons.folder_outlined,
+      size: 20,
+    ),
     title: Text(channel.name),
-    trailing: const Icon(Icons.chevron_right_rounded),
+    trailing: const Icon(Icons.chevron_right_rounded, size: 18),
     onTap: onTap,
   );
 }
@@ -711,7 +923,7 @@ class _ItemPreview extends StatelessWidget {
         ),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 16),
+        padding: const EdgeInsets.symmetric(vertical: 12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
