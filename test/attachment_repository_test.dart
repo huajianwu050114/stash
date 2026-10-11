@@ -7,6 +7,7 @@ import 'package:stash/core/database/app_database.dart';
 import 'package:stash/features/attachments/data/attachment_repository.dart';
 import 'package:stash/features/attachments/data/image_attachment_ingestor.dart';
 import 'package:stash/features/attachments/data/image_import_sources.dart';
+import 'package:stash/features/attachments/presentation/stash_image_drag_source.dart';
 import 'package:stash/features/items/data/item_repository.dart';
 
 import 'test_database.dart';
@@ -70,6 +71,30 @@ void main() {
 
     expect(await file!.exists(), isFalse);
     expect(await db.select(db.attachments).get(), isEmpty);
+  });
+
+  test('drag item exposes a real file and image representation', () async {
+    final attachment = await attachments.importImage(
+      id: 'drag-image',
+      itemId: 'item',
+      bytes: Uint8List.fromList([1, 2, 3]),
+      mimeType: 'image/png',
+      originalFileName: 'picture.png',
+    );
+
+    final item = await StashImageDragItemFactory(attachments)
+        .create(attachment.id);
+
+    expect(item, isNotNull);
+    expect(item!.suggestedName, 'picture.png');
+    expect(item.data, hasLength(2));
+    expect(item.localData, {'stashAttachmentId': attachment.id});
+  });
+
+  test('drag item is unavailable when its managed file is missing', () async {
+    final item = await StashImageDragItemFactory(attachments).create('missing');
+
+    expect(item, isNull);
   });
 
   test('image ingestor imports multiple dropped images in order', () async {

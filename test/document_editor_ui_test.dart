@@ -140,6 +140,11 @@ void main() {
       find.byKey(Key('attachment-image-${attachmentRow.id}')),
       findsOneWidget,
     );
+    await pumpUi(tester);
+    expect(
+      find.byKey(Key('attachment-drag-source-${attachmentRow.id}')),
+      findsOneWidget,
+    );
     await disposeApp(tester);
   });
 
