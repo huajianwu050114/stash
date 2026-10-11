@@ -10,6 +10,8 @@ import '../features/channels/data/channel_repository.dart';
 import '../features/channels/domain/channel.dart';
 import '../features/items/data/item_repository.dart';
 import '../features/items/domain/item.dart';
+import '../features/quick_channel/application/quick_channel_controller.dart';
+import '../features/quick_channel/data/quick_channel_configuration_repository.dart';
 import '../features/quick_stash/application/quick_stash_controller.dart';
 import '../features/quick_stash/application/quick_stash_settings_controller.dart';
 import '../features/quick_stash/data/quick_stash_settings_repository.dart';
@@ -80,6 +82,28 @@ final quickStashSettingsControllerProvider =
       return controller;
     });
 
+final quickChannelConfigurationRepositoryProvider =
+    Provider<QuickChannelConfigurationRepository>(
+      (ref) => QuickChannelConfigurationRepository(
+        MemoryQuickStashPreferenceStore(),
+      ),
+    );
+
+final quickChannelControllerProvider = Provider<QuickChannelController>((ref) {
+  final surface = ref.watch(quickStashControllerProvider);
+  final controller = QuickChannelController(
+    repository: ref.watch(quickChannelConfigurationRepositoryProvider),
+    channels: ref.watch(channelRepositoryProvider),
+    hotkeys: ref.watch(globalHotkeyServiceProvider),
+    quickStashSettings: ref.watch(quickStashSettingsControllerProvider),
+    onGlobalShortcut: (channelId) =>
+        unawaited(surface.toggleQuickChannel(channelId)),
+  );
+  unawaited(controller.initialize());
+  ref.onDispose(controller.dispose);
+  return controller;
+});
+
 final appearanceRepositoryProvider = Provider<AppearanceRepository>(
   (ref) => AppearanceRepository(SharedPreferencesAppearancePreferences()),
 );
@@ -144,6 +168,10 @@ final channelItemsProvider = StreamProvider.family<List<Item>, String>(
 
 final rootChannelsProvider = StreamProvider<List<Channel>>(
   (ref) => ref.watch(channelRepositoryProvider).watchRootChannels(),
+);
+
+final activeChannelsProvider = StreamProvider<List<Channel>>(
+  (ref) => ref.watch(channelRepositoryProvider).watchActiveChannels(),
 );
 
 final childChannelsProvider = StreamProvider.family<List<Channel>, String>(

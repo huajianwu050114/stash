@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 
 import '../../../app/providers.dart';
+import '../../channels/domain/channel.dart';
+import '../../quick_channel/application/quick_channel_controller.dart';
 import '../domain/quick_stash_settings.dart';
 import 'quick_stash_hotkey_adapter.dart';
 
@@ -20,6 +22,12 @@ class QuickStashSettingsScreen extends ConsumerStatefulWidget {
 class _QuickStashSettingsScreenState
     extends ConsumerState<QuickStashSettingsScreen> {
   bool _recording = false;
+  String? _recordingChannelId;
+
+  static const _defaultChannelShortcut = QuickStashShortcut(
+    keyId: 0x00070042,
+    keyLabel: 'F9',
+  );
 
   void _startRecording() {
     ref.read(quickStashSettingsControllerProvider).clearShortcutError();
@@ -43,17 +51,46 @@ class _QuickStashSettingsScreenState
     if (mounted) setState(() => _recording = false);
   }
 
+  void _startChannelRecording(String channelId) {
+    ref.read(quickChannelControllerProvider).clearError(channelId);
+    setState(() => _recordingChannelId = channelId);
+  }
+
+  void _recordChannelHotKey(String channelId, HotKey hotKey) {
+    if (hotKey.physicalKey == PhysicalKeyboardKey.escape) {
+      setState(() => _recordingChannelId = null);
+      return;
+    }
+    final usage = hotKey.physicalKey.usbHidUsage & 0xffff;
+    if (usage >= 0xe0 && usage <= 0xe7) return;
+    unawaited(
+      _commitChannelShortcut(channelId, quickStashShortcutFromHotKey(hotKey)),
+    );
+  }
+
+  Future<void> _commitChannelShortcut(
+    String channelId,
+    QuickStashShortcut shortcut,
+  ) async {
+    await ref
+        .read(quickChannelControllerProvider)
+        .configure(channelId, shortcut);
+    if (mounted) setState(() => _recordingChannelId = null);
+  }
+
   @override
   Widget build(BuildContext context) {
     final appearance = ref.watch(appearanceProvider).value ?? ThemeMode.system;
     final settings = ref.watch(quickStashSettingsControllerProvider);
+    final quickChannels = ref.watch(quickChannelControllerProvider);
+    final channels = ref.watch(activeChannelsProvider);
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 680),
           child: ListenableBuilder(
-            listenable: settings,
+            listenable: Listenable.merge([settings, quickChannels]),
             builder: (context, _) => ListView(
               padding: const EdgeInsets.fromLTRB(24, 16, 24, 48),
               children: [
@@ -148,6 +185,24 @@ class _QuickStashSettingsScreenState
                 ],
                 const SizedBox(height: 32),
                 Text(
+                  'Quick Channels',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Open any Channel as a lightweight palette from a global shortcut.',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _buildQuickChannels(
+                  context,
+                  quickChannels: quickChannels,
+                  channels: channels,
+                ),
+                const SizedBox(height: 32),
+                Text(
                   'Quick Capture Submit Mode',
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
@@ -179,6 +234,134 @@ class _QuickStashSettingsScreenState
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQuickChannels(
+    BuildContext context, {
+    required QuickChannelController quickChannels,
+    required AsyncValue<List<Channel>> channels,
+  }) {
+    if (!quickChannels.shortcutSupported) {
+      return const Text('Quick Channel shortcuts are available on Windows.');
+    }
+    return channels.when(
+      loading: () => const LinearProgressIndicator(),
+      error: (_, _) => const Text('Channels could not be loaded.'),
+      data: (values) {
+        if (values.isEmpty) {
+          return const Text('Create a Channel to add a quick palette.');
+        }
+        return Column(
+          key: const Key('quick-channel-settings'),
+          children: [
+            for (final channel in values)
+              _buildQuickChannelTile(context, quickChannels, channel),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildQuickChannelTile(
+    BuildContext context,
+    QuickChannelController controller,
+    Channel channel,
+  ) {
+    final configuration = controller.configurationFor(channel.id);
+    final enabled = configuration?.quickPaletteEnabled ?? false;
+    final recording = _recordingChannelId == channel.id;
+    final error = controller.errorFor(channel.id);
+    return Card(
+      key: Key('quick-channel-setting-${channel.id}'),
+      margin: const EdgeInsets.only(bottom: 8),
+      elevation: 0,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(8, 4, 12, 8),
+        child: Column(
+          children: [
+            SwitchListTile(
+              dense: true,
+              secondary: const Icon(Icons.folder_outlined),
+              title: Text(channel.name),
+              subtitle: Text(
+                enabled
+                    ? configuration!.globalShortcut.displayLabel
+                    : 'Quick palette off',
+              ),
+              value: enabled,
+              onChanged: (value) {
+                if (value) {
+                  _startChannelRecording(channel.id);
+                } else {
+                  unawaited(controller.disable(channel.id));
+                }
+              },
+            ),
+            if (recording)
+              Container(
+                key: Key('quick-channel-recorder-${channel.id}'),
+                padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Press a shortcut'),
+                          const SizedBox(height: 4),
+                          HotKeyRecorder(
+                            initalHotKey: quickStashShortcutToHotKey(
+                              configuration?.globalShortcut ??
+                                  _defaultChannelShortcut,
+                            ),
+                            onHotKeyRecorded: (hotKey) =>
+                                _recordChannelHotKey(channel.id, hotKey),
+                          ),
+                        ],
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () =>
+                          setState(() => _recordingChannelId = null),
+                      child: const Text('Cancel'),
+                    ),
+                  ],
+                ),
+              )
+            else
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  key: Key('quick-channel-shortcut-${channel.id}'),
+                  onPressed: () => _startChannelRecording(channel.id),
+                  icon: const Icon(Icons.keyboard_outlined, size: 18),
+                  label: Text(enabled ? 'Change shortcut' : 'Set shortcut'),
+                ),
+              ),
+            if (error != null)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+                  child: Text(
+                    error,
+                    key: Key('quick-channel-error-${channel.id}'),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );

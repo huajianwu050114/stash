@@ -28,6 +28,11 @@ class QuickStashShortcut {
 
   bool get isValid => modifiers.isNotEmpty || isFunctionKey;
 
+  bool hasSameChord(QuickStashShortcut other) =>
+      keyId == other.keyId &&
+      modifiers.length == other.modifiers.length &&
+      modifiers.containsAll(other.modifiers);
+
   PhysicalKeyboardKey? get physicalKey =>
       PhysicalKeyboardKey.findKeyByCode(keyId);
 

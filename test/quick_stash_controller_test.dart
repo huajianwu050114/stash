@@ -71,6 +71,36 @@ void main() {
       expect(controller.activationGeneration, generation + 1);
     },
   );
+
+  test(
+    'Quick Channel toggle uses the quick window and tracks its Channel',
+    () async {
+      final window = _FakeWindow();
+      final controller = QuickStashController(window);
+
+      await controller.showQuickChannel('memes');
+
+      expect(controller.surface, StashSurface.quickChannel);
+      expect(controller.quickChannelId, 'memes');
+      expect(window.calls, ['showQuick']);
+
+      window.calls.clear();
+      await controller.toggleQuickChannel('memes');
+      expect(window.calls, ['isVisible', 'isFocused', 'hideQuick']);
+    },
+  );
+
+  test('another Quick Channel replaces the visible palette', () async {
+    final window = _FakeWindow();
+    final controller = QuickStashController(window);
+    await controller.showQuickChannel('first');
+    window.calls.clear();
+
+    await controller.toggleQuickChannel('second');
+
+    expect(controller.quickChannelId, 'second');
+    expect(window.calls, ['showQuick']);
+  });
 }
 
 class _FakeWindow implements DesktopWindowService {

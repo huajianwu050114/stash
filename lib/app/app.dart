@@ -4,6 +4,7 @@ import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../features/items/presentation/home_screen.dart';
+import '../features/quick_channel/presentation/quick_channel_palette.dart';
 import '../features/quick_stash/application/quick_stash_controller.dart';
 import '../features/quick_stash/presentation/quick_stash_screen.dart';
 import 'providers.dart';
@@ -16,6 +17,7 @@ class StashApp extends ConsumerWidget {
     final themeMode = ref.watch(appearanceProvider).value ?? ThemeMode.system;
     final quickStash = ref.watch(quickStashControllerProvider);
     ref.watch(quickStashSettingsControllerProvider);
+    ref.watch(quickChannelControllerProvider);
     return ListenableBuilder(
       listenable: quickStash,
       builder: (context, _) => MaterialApp(
@@ -28,9 +30,13 @@ class StashApp extends ConsumerWidget {
           FlutterQuillLocalizations.delegate,
           ...GlobalMaterialLocalizations.delegates,
         ],
-        home: quickStash.surface == StashSurface.quick
-            ? const QuickStashScreen()
-            : const HomeScreen(),
+        home: switch (quickStash.surface) {
+          StashSurface.quick => const QuickStashScreen(),
+          StashSurface.quickChannel => QuickChannelPalette(
+            channelId: quickStash.quickChannelId!,
+          ),
+          StashSurface.full => const HomeScreen(),
+        },
       ),
     );
   }

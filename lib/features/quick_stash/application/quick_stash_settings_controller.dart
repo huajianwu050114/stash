@@ -24,13 +24,17 @@ class QuickStashSettingsController extends ChangeNotifier {
   QuickStashSettings _settings = const QuickStashSettings();
   bool _isLoading = true;
   String? _shortcutError;
+  Future<void>? _initialization;
+  bool Function(QuickStashShortcut shortcut)? _shortcutConflict;
 
   QuickStashSettings get settings => _settings;
   bool get isLoading => _isLoading;
   bool get shortcutSupported => _hotkeys.isSupported;
   String? get shortcutError => _shortcutError;
 
-  Future<void> initialize() async {
+  Future<void> initialize() => _initialization ??= _initialize();
+
+  Future<void> _initialize() async {
     _settings = await _repository.load();
     if (_hotkeys.isSupported) {
       try {
@@ -46,6 +50,11 @@ class QuickStashSettingsController extends ChangeNotifier {
   Future<bool> changeShortcut(QuickStashShortcut shortcut) async {
     if (!shortcut.isValid || shortcut.physicalKey == null) {
       _shortcutError = 'Use a modifier combination or a function key.';
+      notifyListeners();
+      return false;
+    }
+    if (_shortcutConflict?.call(shortcut) ?? false) {
+      _shortcutError = 'This shortcut is already used by a Quick Channel.';
       notifyListeners();
       return false;
     }
@@ -90,5 +99,11 @@ class QuickStashSettingsController extends ChangeNotifier {
     if (_shortcutError == null) return;
     _shortcutError = null;
     notifyListeners();
+  }
+
+  void setShortcutConflictChecker(
+    bool Function(QuickStashShortcut shortcut)? checker,
+  ) {
+    _shortcutConflict = checker;
   }
 }

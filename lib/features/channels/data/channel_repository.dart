@@ -30,6 +30,15 @@ class ChannelRepository {
   Stream<List<Channel>> watchChildChannels(String parentId) =>
       _watchChildren(parentId);
 
+  Stream<List<Channel>> watchActiveChannels() {
+    final query = _db.select(_db.channels)
+      ..where((row) => row.deletedAt.isNull())
+      ..orderBy([(row) => OrderingTerm.asc(row.name)]);
+    return query.watch().map(
+      (rows) => rows.map((row) => row.toChannel()).toList(),
+    );
+  }
+
   Future<List<Channel>> getActiveChannels() async {
     final rows =
         await (_db.select(_db.channels)

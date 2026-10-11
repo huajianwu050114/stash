@@ -4,13 +4,21 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stash/app/appearance.dart';
 import 'package:stash/app/providers.dart';
+import 'package:stash/core/database/app_database.dart';
 import 'package:stash/features/quick_stash/application/quick_stash_settings_controller.dart';
 import 'package:stash/features/quick_stash/data/quick_stash_settings_repository.dart';
 import 'package:stash/features/quick_stash/domain/quick_stash_settings.dart';
 import 'package:stash/features/quick_stash/presentation/quick_stash_settings_screen.dart';
 import 'package:stash/platform/global_hotkey/global_hotkey_service.dart';
 
+import 'test_database.dart';
+
 void main() {
+  late AppDatabase db;
+
+  setUp(() => db = createInMemoryDatabase());
+  tearDown(() => db.close());
+
   testWidgets('settings records a real key chord and changes submit mode', (
     tester,
   ) async {
@@ -26,6 +34,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          databaseProvider.overrideWithValue(db),
           quickStashSettingsControllerProvider.overrideWithValue(settings),
           appearanceRepositoryProvider.overrideWithValue(
             AppearanceRepository(_MemoryAppearancePreferences()),
@@ -60,6 +69,8 @@ void main() {
     await tester.pump();
     await tester.pump(Duration.zero);
     expect(settings.settings.submitMode, QuickCaptureSubmitMode.controlEnter);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(Duration.zero);
   });
 
   testWidgets('Escape cancels shortcut recording without changing settings', (
@@ -77,6 +88,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          databaseProvider.overrideWithValue(db),
           quickStashSettingsControllerProvider.overrideWithValue(settings),
           appearanceRepositoryProvider.overrideWithValue(
             AppearanceRepository(_MemoryAppearancePreferences()),
@@ -97,6 +109,8 @@ void main() {
       settings.settings.globalShortcut,
       QuickStashShortcut.defaultShortcut,
     );
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(Duration.zero);
   });
 }
 
