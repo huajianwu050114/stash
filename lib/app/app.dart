@@ -18,28 +18,70 @@ class StashApp extends ConsumerWidget {
     final quickStash = ref.watch(quickStashControllerProvider);
     ref.watch(quickStashSettingsControllerProvider);
     ref.watch(quickChannelControllerProvider);
-    return ListenableBuilder(
-      listenable: quickStash,
-      builder: (context, _) => MaterialApp(
-        title: 'Stash',
-        debugShowCheckedModeBanner: false,
-        themeMode: themeMode,
-        theme: _theme(Brightness.light),
-        darkTheme: _theme(Brightness.dark),
-        localizationsDelegates: const [
-          FlutterQuillLocalizations.delegate,
-          ...GlobalMaterialLocalizations.delegates,
-        ],
-        home: switch (quickStash.surface) {
-          StashSurface.quick => const QuickStashScreen(),
-          StashSurface.quickChannel => QuickChannelPalette(
-            channelId: quickStash.quickChannelId!,
-          ),
-          StashSurface.full => const HomeScreen(),
-        },
-      ),
+    return MaterialApp(
+      title: 'Stash',
+      debugShowCheckedModeBanner: false,
+      themeMode: themeMode,
+      theme: _theme(Brightness.light),
+      darkTheme: _theme(Brightness.dark),
+      localizationsDelegates: const [
+        FlutterQuillLocalizations.delegate,
+        ...GlobalMaterialLocalizations.delegates,
+      ],
+      home: StashSurfaceHost(controller: quickStash),
     );
   }
+}
+
+class StashSurfaceHost extends StatefulWidget {
+  const StashSurfaceHost({super.key, required this.controller});
+
+  final QuickStashController controller;
+
+  @override
+  State<StashSurfaceHost> createState() => _StashSurfaceHostState();
+}
+
+class _StashSurfaceHostState extends State<StashSurfaceHost> {
+  final _fullNavigatorKey = GlobalKey<NavigatorState>();
+  late bool _fullSurfaceInitialized =
+      widget.controller.surface == StashSurface.full;
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: widget.controller,
+    builder: (context, _) {
+      final surface = widget.controller.surface;
+      if (surface == StashSurface.full) _fullSurfaceInitialized = true;
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          if (_fullSurfaceInitialized)
+            Offstage(
+              offstage: surface != StashSurface.full,
+              child: TickerMode(
+                enabled: surface == StashSurface.full,
+                child: Navigator(
+                  key: _fullNavigatorKey,
+                  initialRoute: '/',
+                  onGenerateRoute: (settings) => MaterialPageRoute<void>(
+                    settings: settings,
+                    builder: (_) => const HomeScreen(),
+                  ),
+                ),
+              ),
+            ),
+          if (surface == StashSurface.quick)
+            const QuickStashScreen(key: Key('quick-surface-host')),
+          if (surface == StashSurface.quickChannel)
+            QuickChannelPalette(
+              key: const Key('quick-channel-surface-host'),
+              channelId: widget.controller.quickChannelId!,
+            ),
+        ],
+      );
+    },
+  );
 }
 
 ThemeData _theme(Brightness brightness) {

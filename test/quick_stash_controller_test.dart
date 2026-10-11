@@ -101,6 +101,21 @@ void main() {
     expect(controller.quickChannelId, 'second');
     expect(window.calls, ['showQuick']);
   });
+
+  test(
+    'a failed window transition does not block the next activation',
+    () async {
+      final window = _FakeWindow()..failNextQuickShow = true;
+      final controller = QuickStashController(window);
+
+      await expectLater(controller.showQuick(), throwsStateError);
+      await controller.showQuick();
+
+      expect(window.calls, ['showQuick', 'showQuick']);
+      expect(controller.surface, StashSurface.quick);
+      expect(window.visible, isTrue);
+    },
+  );
 }
 
 class _FakeWindow implements DesktopWindowService {
@@ -108,6 +123,7 @@ class _FakeWindow implements DesktopWindowService {
   final Set<WindowFocusListener> _focusListeners = {};
   bool visible = true;
   bool focused = true;
+  bool failNextQuickShow = false;
 
   @override
   bool get isSupported => true;
@@ -137,6 +153,10 @@ class _FakeWindow implements DesktopWindowService {
   @override
   Future<void> showQuick() async {
     calls.add('showQuick');
+    if (failNextQuickShow) {
+      failNextQuickShow = false;
+      throw StateError('window failed');
+    }
     visible = true;
     focused = true;
     emitFocus(true);
