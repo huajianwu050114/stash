@@ -27,7 +27,17 @@ class NoopDesktopTrayService implements DesktopTrayService {
 }
 
 class TrayManagerDesktopTrayService implements DesktopTrayService {
+  factory TrayManagerDesktopTrayService({
+    required String label,
+    required String identifier,
+  }) => TrayManagerDesktopTrayService._(label, identifier);
+
+  TrayManagerDesktopTrayService._(this._label, this._identifier);
+
   static const iconAsset = 'windows/runner/resources/app_icon.ico';
+
+  final String _label;
+  final String _identifier;
 
   tray.TrayIcon? _trayIcon;
   tray.Image? _iconImage;
@@ -44,7 +54,7 @@ class TrayManagerDesktopTrayService implements DesktopTrayService {
     required Future<void> Function() onExit,
   }) async {
     if (_trayIcon != null) return;
-    final trayIcon = tray.TrayIcon.createWithIdentifier('stash.desktop');
+    final trayIcon = tray.TrayIcon.createWithIdentifier(_identifier);
     final image = tray.ImageAsset.fromAsset(iconAsset);
     final menu = tray.Menu.create();
     if (trayIcon == null || image == null || menu == null) {
@@ -54,8 +64,11 @@ class TrayManagerDesktopTrayService implements DesktopTrayService {
       throw StateError('Could not create the Stash system tray.');
     }
 
-    final open = _menuItem('Open Stash', onOpenFull);
-    final quick = _menuItem('Quick Stash', onOpenQuick);
+    final open = _menuItem('Open $_label', onOpenFull);
+    final quick = _menuItem(
+      _label == 'Stash' ? 'Quick Stash' : 'Quick Stash Dev',
+      onOpenQuick,
+    );
     final exit = _menuItem('Exit', onExit);
     menu
       ..addItem(open)
@@ -69,7 +82,7 @@ class TrayManagerDesktopTrayService implements DesktopTrayService {
     });
     trayIcon
       ..icon = image
-      ..setTooltip('Stash')
+      ..setTooltip(_label)
       ..setContextMenu(menu)
       ..setContextMenuTrigger(tray.ContextMenuTrigger.rightClicked);
     if (!trayIcon.setVisible(true)) {

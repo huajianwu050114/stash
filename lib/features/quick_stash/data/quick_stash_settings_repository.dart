@@ -1,7 +1,6 @@
 import 'dart:convert';
 
-import 'package:shared_preferences/shared_preferences.dart';
-
+import '../../../core/preferences/profiled_preferences.dart';
 import '../domain/quick_stash_settings.dart';
 
 abstract interface class QuickStashPreferenceStore {
@@ -22,10 +21,9 @@ class MemoryQuickStashPreferenceStore implements QuickStashPreferenceStore {
 }
 
 class SharedPreferencesQuickStashStore implements QuickStashPreferenceStore {
-  SharedPreferencesQuickStashStore([SharedPreferencesAsync? preferences])
-    : _preferences = preferences ?? SharedPreferencesAsync();
+  SharedPreferencesQuickStashStore(this._preferences);
 
-  final SharedPreferencesAsync _preferences;
+  final ProfiledPreferences _preferences;
 
   @override
   Future<String?> getString(String key) => _preferences.getString(key);
@@ -36,12 +34,18 @@ class SharedPreferencesQuickStashStore implements QuickStashPreferenceStore {
 }
 
 class QuickStashSettingsRepository {
-  QuickStashSettingsRepository(this._store);
+  QuickStashSettingsRepository(
+    this._store, {
+    this.globalShortcutsEnabledByDefault = true,
+  });
 
   static const shortcutKey = 'quick_stash.global_shortcut';
   static const submitModeKey = 'quick_stash.submit_mode';
+  static const globalShortcutsEnabledKey =
+      'quick_stash.global_shortcuts_enabled';
 
   final QuickStashPreferenceStore _store;
+  final bool globalShortcutsEnabledByDefault;
 
   Future<QuickStashSettings> load() async {
     var shortcut = QuickStashShortcut.defaultShortcut;
@@ -63,7 +67,17 @@ class QuickStashSettingsRepository {
       (value) => value.name == submitModeName,
       orElse: () => QuickCaptureSubmitMode.enter,
     );
-    return QuickStashSettings(globalShortcut: shortcut, submitMode: submitMode);
+    final enabledValue = await _store.getString(globalShortcutsEnabledKey);
+    final globalShortcutsEnabled = switch (enabledValue) {
+      'true' => true,
+      'false' => false,
+      _ => globalShortcutsEnabledByDefault,
+    };
+    return QuickStashSettings(
+      globalShortcut: shortcut,
+      submitMode: submitMode,
+      globalShortcutsEnabled: globalShortcutsEnabled,
+    );
   }
 
   Future<void> saveShortcut(QuickStashShortcut shortcut) =>
@@ -71,4 +85,7 @@ class QuickStashSettingsRepository {
 
   Future<void> saveSubmitMode(QuickCaptureSubmitMode mode) =>
       _store.setString(submitModeKey, mode.name);
+
+  Future<void> saveGlobalShortcutsEnabled(bool enabled) =>
+      _store.setString(globalShortcutsEnabledKey, enabled.toString());
 }

@@ -33,6 +33,7 @@ class QuickChannelController extends ChangeNotifier {
     this._onGlobalShortcut,
   ) {
     _quickStashSettings.setShortcutConflictChecker(_conflictsWithQuickChannel);
+    _quickStashSettings.addListener(_handleGlobalShortcutSettingChanged);
   }
 
   final QuickChannelConfigurationRepository _repository;
@@ -49,6 +50,8 @@ class QuickChannelController extends ChangeNotifier {
   bool _reconcilingChannels = false;
   List<Channel>? _pendingChannelSnapshot;
   bool _isLoading = true;
+  bool _updatingGlobalShortcutState = false;
+  bool _disposed = false;
 
   List<QuickChannelConfiguration> get configurations =>
       List.unmodifiable(_configurations.values);
@@ -100,7 +103,7 @@ class QuickChannelController extends ChangeNotifier {
             'Shortcut conflicts with another palette.';
         continue;
       }
-      if (_hotkeys.isSupported) {
+      if (_hotkeys.isSupported && _quickStashSettings.globalShortcutsEnabled) {
         try {
           await _register(configuration);
         } catch (_) {
@@ -204,7 +207,9 @@ class QuickChannelController extends ChangeNotifier {
         previous != null &&
         previous.quickPaletteEnabled &&
         previous.globalShortcut.hasSameChord(shortcut);
-    if (_hotkeys.isSupported && !sameRegisteredChord) {
+    if (_hotkeys.isSupported &&
+        _quickStashSettings.globalShortcutsEnabled &&
+        !sameRegisteredChord) {
       try {
         await _register(replacement);
       } catch (_) {
@@ -217,7 +222,9 @@ class QuickChannelController extends ChangeNotifier {
     try {
       await _repository.save(next.values);
     } catch (_) {
-      if (_hotkeys.isSupported && !sameRegisteredChord) {
+      if (_hotkeys.isSupported &&
+          _quickStashSettings.globalShortcutsEnabled &&
+          !sameRegisteredChord) {
         await _hotkeys.unregister(shortcut);
         if (previous != null && previous.quickPaletteEnabled) {
           _registeredShortcuts[channelId] = previous.globalShortcut;
@@ -228,6 +235,7 @@ class QuickChannelController extends ChangeNotifier {
       return _fail(channelId, 'The shortcut could not be saved.');
     }
     if (_hotkeys.isSupported &&
+        _quickStashSettings.globalShortcutsEnabled &&
         previous != null &&
         previous.quickPaletteEnabled &&
         !sameRegisteredChord) {
@@ -269,8 +277,52 @@ class QuickChannelController extends ChangeNotifier {
       configuration.globalShortcut,
       () => _onGlobalShortcut(configuration.channelId),
     );
+    if (_disposed) {
+      await _hotkeys.unregister(configuration.globalShortcut);
+      return;
+    }
     _registeredShortcuts[configuration.channelId] =
         configuration.globalShortcut;
+  }
+
+  void _handleGlobalShortcutSettingChanged() {
+    if (_disposed || _isLoading || _updatingGlobalShortcutState) return;
+    unawaited(_applyGlobalShortcutSetting());
+  }
+
+  Future<void> _applyGlobalShortcutSetting() async {
+    if (_disposed) return;
+    _updatingGlobalShortcutState = true;
+    try {
+      if (!_hotkeys.isSupported ||
+          !_quickStashSettings.globalShortcutsEnabled) {
+        for (final shortcut in _registeredShortcuts.values.toList()) {
+          await _hotkeys.unregister(shortcut);
+        }
+        _registeredShortcuts.clear();
+        if (_disposed) return;
+        notifyListeners();
+        return;
+      }
+      for (final configuration in _configurations.values) {
+        if (!configuration.quickPaletteEnabled ||
+            _registeredShortcuts.containsKey(configuration.channelId)) {
+          continue;
+        }
+        try {
+          await _register(configuration);
+          if (_disposed) return;
+          _errors.remove(configuration.channelId);
+        } catch (_) {
+          _errors[configuration.channelId] =
+              'The saved shortcut is unavailable.';
+        }
+      }
+      if (_disposed) return;
+      notifyListeners();
+    } finally {
+      _updatingGlobalShortcutState = false;
+    }
   }
 
   bool _fail(String channelId, String message) {
@@ -281,7 +333,9 @@ class QuickChannelController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     _quickStashSettings.setShortcutConflictChecker(null);
+    _quickStashSettings.removeListener(_handleGlobalShortcutSettingChanged);
     unawaited(_channelSubscription?.cancel());
     if (_hotkeys.isSupported) {
       for (final shortcut in _registeredShortcuts.values) {

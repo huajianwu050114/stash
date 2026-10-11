@@ -55,6 +55,46 @@ void main() {
     expect(restored.quickPaletteEnabled, isTrue);
   });
 
+  test('Dev Quick Channel hotkeys wait for explicit global opt-in', () async {
+    final channel = await channels.createRootChannel(
+      id: 'dev-channel',
+      name: 'Dev Channel',
+    );
+    const f9 = QuickStashShortcut(keyId: 0x00070042, keyLabel: 'F9');
+    final devStore = MemoryQuickStashPreferenceStore();
+    await QuickChannelConfigurationRepository(devStore).save([
+      QuickChannelConfiguration(channelId: channel.id, globalShortcut: f9),
+    ]);
+    final devHotkeys = _FakeHotkeys();
+    final devSettings = QuickStashSettingsController(
+      repository: QuickStashSettingsRepository(
+        devStore,
+        globalShortcutsEnabledByDefault: false,
+      ),
+      hotkeys: devHotkeys,
+      onGlobalShortcut: () {},
+    );
+    final controller = QuickChannelController(
+      repository: QuickChannelConfigurationRepository(devStore),
+      channels: channels,
+      hotkeys: devHotkeys,
+      quickStashSettings: devSettings,
+      onGlobalShortcut: (_) {},
+    );
+
+    await controller.initialize();
+    expect(devHotkeys.registered, isEmpty);
+
+    expect(await devSettings.changeGlobalShortcutsEnabled(true), isTrue);
+    for (var attempt = 0; attempt < 20; attempt++) {
+      if (devHotkeys.registered.length == 2) break;
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    await Future<void>.delayed(Duration.zero);
+    expect(devHotkeys.registered, [QuickStashShortcut.defaultShortcut, f9]);
+    controller.dispose();
+  });
+
   test(
     'configuration rejects Quick Stash and Channel shortcut conflicts',
     () async {

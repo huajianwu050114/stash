@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/providers.dart';
+import '../../../app/dev_profile_badge.dart';
 import '../../attachments/data/attachment_repository.dart';
 import '../../attachments/presentation/stash_image_drag_source.dart';
 import '../../items/data/item_document_codec.dart';
@@ -92,6 +93,7 @@ class _PaletteHeader extends StatelessWidget {
               style: Theme.of(context).textTheme.titleMedium,
             ),
           ),
+          const DevProfileBadge(),
           IconButton(
             key: const Key('quick-channel-close'),
             tooltip: 'Close',

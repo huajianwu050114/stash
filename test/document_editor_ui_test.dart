@@ -30,10 +30,7 @@ void main() {
     supportDirectory = await Directory.systemTemp.createTemp(
       'stash-editor-test-',
     );
-    attachments = AttachmentRepository(
-      db,
-      supportDirectory: () async => supportDirectory,
-    );
+    attachments = AttachmentRepository(db, storageRoot: supportDirectory);
     picker = _FakeImagePicker();
     clipboard = _FakeClipboard();
     cleanupRegistered = false;

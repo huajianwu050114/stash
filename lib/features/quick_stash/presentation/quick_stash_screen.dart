@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../app/providers.dart';
+import '../../../app/dev_profile_badge.dart';
 import '../../attachments/data/attachment_repository.dart';
 import '../../attachments/data/image_attachment_ingestor.dart';
 import '../../attachments/data/image_import_sources.dart';
@@ -403,6 +404,7 @@ class _QuickStashScreenState extends ConsumerState<QuickStashScreen> {
                         style: Theme.of(context).textTheme.titleLarge
                             ?.copyWith(fontWeight: FontWeight.w700),
                       ),
+                      const DevProfileBadge(),
                       const Spacer(),
                       IconButton(
                         key: const Key('quick-expand'),

@@ -9,9 +9,16 @@ import 'desktop_window_service.dart';
 class WindowManagerDesktopWindowService
     with WindowListener
     implements DesktopWindowService {
+  factory WindowManagerDesktopWindowService({required String title}) =>
+      WindowManagerDesktopWindowService._(title);
+
+  WindowManagerDesktopWindowService._(this._title);
+
   static const Size fullSize = Size(960, 660);
   static const Size quickSize = Size(410, 600);
   static const Size quickChannelSize = Size(410, 500);
+
+  final String _title;
 
   final Set<WindowFocusListener> _focusListeners = {};
   bool _listening = false;
@@ -29,10 +36,10 @@ class WindowManagerDesktopWindowService
     }
     unawaited(
       windowManager.waitUntilReadyToShow(
-        const WindowOptions(
+        WindowOptions(
           size: fullSize,
           center: true,
-          title: 'Stash',
+          title: _title,
           titleBarStyle: TitleBarStyle.normal,
           skipTaskbar: false,
         ),

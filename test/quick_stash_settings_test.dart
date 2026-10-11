@@ -45,6 +45,27 @@ void main() {
     expect(triggered, 1);
   });
 
+  test('Dev defaults to no registration until explicitly enabled', () async {
+    final repository = QuickStashSettingsRepository(
+      MemoryQuickStashPreferenceStore(),
+      globalShortcutsEnabledByDefault: false,
+    );
+    final hotkeys = _FakeHotkeys();
+    final controller = QuickStashSettingsController(
+      repository: repository,
+      hotkeys: hotkeys,
+      onGlobalShortcut: () {},
+    );
+
+    await controller.initialize();
+    expect(controller.globalShortcutsEnabled, isFalse);
+    expect(hotkeys.registered, isEmpty);
+
+    expect(await controller.changeGlobalShortcutsEnabled(true), isTrue);
+    expect(controller.globalShortcutsEnabled, isTrue);
+    expect(hotkeys.registered, [QuickStashShortcut.defaultShortcut]);
+  });
+
   test(
     'failed registration keeps previous shortcut active and persisted',
     () async {

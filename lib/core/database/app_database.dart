@@ -1,6 +1,8 @@
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 
+import '../storage/app_storage_paths.dart';
+
 import 'tables/attachments.dart';
 import 'tables/items.dart';
 import 'tables/channels.dart';
@@ -19,7 +21,16 @@ part 'app_database.g.dart';
 class AppDatabase extends _$AppDatabase {
   /// Opens the real on-device database using the best native SQLite backend
   /// available on the current platform (see `package:drift_flutter`).
-  AppDatabase.open() : super(driftDatabase(name: 'stash'));
+  AppDatabase.open({required AppStoragePaths storage})
+    : super(
+        driftDatabase(
+          name: 'stash',
+          native: DriftNativeOptions(
+            databasePath: () async => storage.databaseFile.path,
+            tempDirectoryPath: () async => storage.root.path,
+          ),
+        ),
+      );
 
   /// Direct-executor constructor for tests (e.g. `NativeDatabase.memory()`).
   AppDatabase(super.executor);

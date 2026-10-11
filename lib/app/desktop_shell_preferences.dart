@@ -1,4 +1,4 @@
-import 'package:shared_preferences/shared_preferences.dart';
+import '../core/preferences/profiled_preferences.dart';
 
 abstract interface class DesktopShellPreferences {
   Future<bool?> getBool(String key);
@@ -7,11 +7,9 @@ abstract interface class DesktopShellPreferences {
 
 class SharedPreferencesDesktopShellPreferences
     implements DesktopShellPreferences {
-  SharedPreferencesDesktopShellPreferences([
-    SharedPreferencesAsync? preferences,
-  ]) : _preferences = preferences ?? SharedPreferencesAsync();
+  SharedPreferencesDesktopShellPreferences(this._preferences);
 
-  final SharedPreferencesAsync _preferences;
+  final ProfiledPreferences _preferences;
 
   @override
   Future<bool?> getBool(String key) => _preferences.getBool(key);

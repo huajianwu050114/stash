@@ -2,20 +2,21 @@ import 'dart:io';
 
 import 'package:drift/drift.dart';
 import 'package:path/path.dart' as path;
-import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/database/app_database.dart';
 import '../domain/attachment.dart';
 
-typedef SupportDirectoryProvider = Future<Directory> Function();
-
 class AttachmentRepository {
-  AttachmentRepository(this._db, {SupportDirectoryProvider? supportDirectory})
-    : _supportDirectory = supportDirectory ?? getApplicationSupportDirectory;
+  factory AttachmentRepository(
+    AppDatabase db, {
+    required Directory storageRoot,
+  }) => AttachmentRepository._(db, storageRoot);
+
+  AttachmentRepository._(this._db, this._storageRoot);
 
   final AppDatabase _db;
-  final SupportDirectoryProvider _supportDirectory;
+  final Directory _storageRoot;
   static final Uuid _uuid = Uuid();
 
   Future<Attachment> importImage({
@@ -123,7 +124,7 @@ class AttachmentRepository {
     if (path.isAbsolute(relativePath)) {
       throw StateError('Attachment paths must be relative.');
     }
-    final root = await _supportDirectory();
+    final root = _storageRoot;
     final resolved = path.normalize(path.join(root.path, relativePath));
     if (!path.isWithin(root.path, resolved)) {
       throw StateError('Attachment path escapes managed storage.');

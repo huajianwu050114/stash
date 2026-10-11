@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stash/app/appearance.dart';
+import 'package:stash/app/app_profile.dart';
 import 'package:stash/app/providers.dart';
 import 'package:stash/core/database/app_database.dart';
 import 'package:stash/features/quick_stash/application/quick_stash_settings_controller.dart';
@@ -109,6 +110,47 @@ void main() {
       settings.settings.globalShortcut,
       QuickStashShortcut.defaultShortcut,
     );
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(Duration.zero);
+  });
+
+  testWidgets('Dev explains that global shortcuts are disabled by default', (
+    tester,
+  ) async {
+    final hotkeys = _FakeHotkeys();
+    final settings = QuickStashSettingsController(
+      repository: QuickStashSettingsRepository(
+        MemoryQuickStashPreferenceStore(),
+        globalShortcutsEnabledByDefault: false,
+      ),
+      hotkeys: hotkeys,
+      onGlobalShortcut: () {},
+    );
+    await settings.initialize();
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          appProfileProvider.overrideWithValue(AppProfile.dev),
+          databaseProvider.overrideWithValue(db),
+          quickStashSettingsControllerProvider.overrideWithValue(settings),
+          appearanceRepositoryProvider.overrideWithValue(
+            AppearanceRepository(_MemoryAppearancePreferences()),
+          ),
+        ],
+        child: const MaterialApp(home: QuickStashSettingsScreen()),
+      ),
+    );
+    await tester.pump();
+
+    expect(
+      find.byKey(const Key('dev-global-shortcuts-toggle')),
+      findsOneWidget,
+    );
+    expect(find.text('Enable global shortcuts in Dev'), findsOneWidget);
+    expect(settings.globalShortcutsEnabled, isFalse);
+    expect(hotkeys.registered, isEmpty);
+
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(Duration.zero);
   });

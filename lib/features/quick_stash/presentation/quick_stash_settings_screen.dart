@@ -81,6 +81,7 @@ class _QuickStashSettingsScreenState
   @override
   Widget build(BuildContext context) {
     final appearance = ref.watch(appearanceProvider).value ?? ThemeMode.system;
+    final profile = ref.watch(appProfileProvider);
     final settings = ref.watch(quickStashSettingsControllerProvider);
     final quickChannels = ref.watch(quickChannelControllerProvider);
     final channels = ref.watch(activeChannelsProvider);
@@ -115,6 +116,31 @@ class _QuickStashSettingsScreenState
                       .setThemeMode(selection.single),
                 ),
                 const SizedBox(height: 32),
+                if (profile.isDevelopment) ...[
+                  Text(
+                    'Development Hotkeys',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  Card(
+                    elevation: 0,
+                    child: SwitchListTile(
+                      key: const Key('dev-global-shortcuts-toggle'),
+                      secondary: const Icon(Icons.developer_mode_outlined),
+                      title: const Text('Enable global shortcuts in Dev'),
+                      subtitle: const Text(
+                        'Off by default so Stash Dev cannot take shortcuts '
+                        'from Stable. Enable only when you intend to test '
+                        'Dev hotkeys.',
+                      ),
+                      value: settings.globalShortcutsEnabled,
+                      onChanged: (value) => unawaited(
+                        settings.changeGlobalShortcutsEnabled(value),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+                ],
                 Text(
                   'Quick Stash Shortcut',
                   style: Theme.of(context).textTheme.titleMedium,

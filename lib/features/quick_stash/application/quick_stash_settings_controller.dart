@@ -30,13 +30,14 @@ class QuickStashSettingsController extends ChangeNotifier {
   QuickStashSettings get settings => _settings;
   bool get isLoading => _isLoading;
   bool get shortcutSupported => _hotkeys.isSupported;
+  bool get globalShortcutsEnabled => _settings.globalShortcutsEnabled;
   String? get shortcutError => _shortcutError;
 
   Future<void> initialize() => _initialization ??= _initialize();
 
   Future<void> _initialize() async {
     _settings = await _repository.load();
-    if (_hotkeys.isSupported) {
+    if (_hotkeys.isSupported && _settings.globalShortcutsEnabled) {
       try {
         await _hotkeys.register(_settings.globalShortcut, _onGlobalShortcut);
       } catch (_) {
@@ -65,7 +66,7 @@ class QuickStashSettingsController extends ChangeNotifier {
       return true;
     }
     try {
-      if (_hotkeys.isSupported) {
+      if (_hotkeys.isSupported && _settings.globalShortcutsEnabled) {
         await _hotkeys.register(shortcut, _onGlobalShortcut);
       }
     } catch (_) {
@@ -76,12 +77,16 @@ class QuickStashSettingsController extends ChangeNotifier {
     try {
       await _repository.saveShortcut(shortcut);
     } catch (_) {
-      if (_hotkeys.isSupported) await _hotkeys.unregister(shortcut);
+      if (_hotkeys.isSupported && _settings.globalShortcutsEnabled) {
+        await _hotkeys.unregister(shortcut);
+      }
       _shortcutError = 'The shortcut could not be saved.';
       notifyListeners();
       return false;
     }
-    if (_hotkeys.isSupported) await _hotkeys.unregister(previous);
+    if (_hotkeys.isSupported && _settings.globalShortcutsEnabled) {
+      await _hotkeys.unregister(previous);
+    }
     _settings = _settings.copyWith(globalShortcut: shortcut);
     _shortcutError = null;
     notifyListeners();
@@ -93,6 +98,37 @@ class QuickStashSettingsController extends ChangeNotifier {
     await _repository.saveSubmitMode(mode);
     _settings = _settings.copyWith(submitMode: mode);
     notifyListeners();
+  }
+
+  Future<bool> changeGlobalShortcutsEnabled(bool enabled) async {
+    await initialize();
+    if (enabled == _settings.globalShortcutsEnabled) return true;
+    _shortcutError = null;
+    if (enabled && _hotkeys.isSupported) {
+      try {
+        await _hotkeys.register(_settings.globalShortcut, _onGlobalShortcut);
+      } catch (_) {
+        _shortcutError = 'The saved shortcut is unavailable.';
+        notifyListeners();
+        return false;
+      }
+    }
+    try {
+      await _repository.saveGlobalShortcutsEnabled(enabled);
+    } catch (_) {
+      if (enabled && _hotkeys.isSupported) {
+        await _hotkeys.unregister(_settings.globalShortcut);
+      }
+      _shortcutError = 'The shortcut preference could not be saved.';
+      notifyListeners();
+      return false;
+    }
+    if (!enabled && _hotkeys.isSupported) {
+      await _hotkeys.unregister(_settings.globalShortcut);
+    }
+    _settings = _settings.copyWith(globalShortcutsEnabled: enabled);
+    notifyListeners();
+    return true;
   }
 
   void clearShortcutError() {

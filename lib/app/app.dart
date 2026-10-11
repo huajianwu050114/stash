@@ -15,11 +15,12 @@ class StashApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(appearanceProvider).value ?? ThemeMode.system;
+    final profile = ref.watch(appProfileProvider);
     final quickStash = ref.watch(quickStashControllerProvider);
     ref.watch(quickStashSettingsControllerProvider);
     ref.watch(quickChannelControllerProvider);
     return MaterialApp(
-      title: 'Stash',
+      title: profile.displayName,
       debugShowCheckedModeBanner: false,
       themeMode: themeMode,
       theme: _theme(Brightness.light),

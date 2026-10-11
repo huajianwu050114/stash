@@ -20,10 +20,7 @@ void main() {
   setUp(() async {
     db = createInMemoryDatabase();
     supportDirectory = await Directory.systemTemp.createTemp('stash-test-');
-    attachments = AttachmentRepository(
-      db,
-      supportDirectory: () async => supportDirectory,
-    );
+    attachments = AttachmentRepository(db, storageRoot: supportDirectory);
   });
 
   tearDown(() async {

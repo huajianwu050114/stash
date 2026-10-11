@@ -37,10 +37,7 @@ void main() {
     supportDirectory = await Directory.systemTemp.createTemp(
       'stash-quick-test-',
     );
-    attachments = AttachmentRepository(
-      db,
-      supportDirectory: () async => supportDirectory,
-    );
+    attachments = AttachmentRepository(db, storageRoot: supportDirectory);
     window = _FakeWindow();
     quickStash = QuickStashController(window);
     await quickStash.showQuick();

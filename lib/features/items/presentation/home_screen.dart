@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/providers.dart';
+import '../../../app/dev_profile_badge.dart';
 import '../../attachments/data/attachment_repository.dart';
 import '../../channels/domain/channel.dart';
 import '../../channels/presentation/location_picker.dart';
@@ -74,10 +75,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         appBar: AppBar(
           toolbarHeight: wide ? 48 : 60,
           titleSpacing: wide ? 16 : 20,
-          title: Text(
-            'Stash',
-            style: Theme.of(context).textTheme.titleLarge
-                ?.copyWith(fontWeight: FontWeight.w700, letterSpacing: -0.3),
+          title: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Stash',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.3,
+                  ),
+                ),
+                const DevProfileBadge(),
+              ],
+            ),
           ),
           actions: [
             PopupMenuButton<ThemeMode>(

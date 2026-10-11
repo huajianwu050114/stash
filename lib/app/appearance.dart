@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+
+import '../core/preferences/profiled_preferences.dart';
 
 abstract interface class AppearancePreferences {
   Future<String?> getString(String key);
@@ -7,10 +8,9 @@ abstract interface class AppearancePreferences {
 }
 
 class SharedPreferencesAppearancePreferences implements AppearancePreferences {
-  SharedPreferencesAppearancePreferences([SharedPreferencesAsync? preferences])
-    : _preferences = preferences ?? SharedPreferencesAsync();
+  SharedPreferencesAppearancePreferences(this._preferences);
 
-  final SharedPreferencesAsync _preferences;
+  final ProfiledPreferences _preferences;
 
   @override
   Future<String?> getString(String key) => _preferences.getString(key);

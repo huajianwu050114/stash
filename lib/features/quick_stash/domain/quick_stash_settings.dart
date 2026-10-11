@@ -88,16 +88,21 @@ class QuickStashSettings {
   const QuickStashSettings({
     this.globalShortcut = QuickStashShortcut.defaultShortcut,
     this.submitMode = QuickCaptureSubmitMode.enter,
+    this.globalShortcutsEnabled = true,
   });
 
   final QuickStashShortcut globalShortcut;
   final QuickCaptureSubmitMode submitMode;
+  final bool globalShortcutsEnabled;
 
   QuickStashSettings copyWith({
     QuickStashShortcut? globalShortcut,
     QuickCaptureSubmitMode? submitMode,
+    bool? globalShortcutsEnabled,
   }) => QuickStashSettings(
     globalShortcut: globalShortcut ?? this.globalShortcut,
     submitMode: submitMode ?? this.submitMode,
+    globalShortcutsEnabled:
+        globalShortcutsEnabled ?? this.globalShortcutsEnabled,
   );
 }

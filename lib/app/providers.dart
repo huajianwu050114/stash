@@ -1,9 +1,13 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
+import 'package:drift/native.dart';
 
 import '../core/database/app_database.dart';
+import '../core/preferences/profiled_preferences.dart';
+import '../core/storage/app_storage_paths.dart';
 import '../features/attachments/data/attachment_repository.dart';
 import '../features/attachments/data/image_import_sources.dart';
 import '../features/channels/data/channel_repository.dart';
@@ -18,12 +22,42 @@ import '../features/quick_stash/data/quick_stash_settings_repository.dart';
 import '../platform/desktop_window/desktop_window_service.dart';
 import '../platform/global_hotkey/global_hotkey_service.dart';
 import 'appearance.dart';
+import 'app_profile.dart';
 import 'desktop_shell_preferences.dart';
+
+final appProfileProvider = Provider<AppProfile>((ref) => AppProfile.stable);
+
+/// Production overrides this with a resolved profile root. An unconfigured
+/// container (including widget tests) gets an isolated temporary root and can
+/// therefore never fall through to Stable or Dev storage.
+final appStoragePathsProvider = Provider<AppStoragePaths>((ref) {
+  final temporarySupport = Directory.systemTemp.createTempSync(
+    'stash-provider-',
+  );
+  ref.onDispose(() {
+    if (temporarySupport.existsSync()) {
+      temporarySupport.deleteSync(recursive: true);
+    }
+  });
+  return AppStoragePaths.fromSupportDirectory(
+    profile: ref.watch(appProfileProvider),
+    supportDirectory: temporarySupport,
+  );
+});
+
+/// Tests default to an in-memory backend. Production replaces this in
+/// [bootstrap] with the profile-scoped SharedPreferences backend.
+final profiledPreferencesProvider = Provider<ProfiledPreferences>(
+  (ref) => ProfiledPreferences(
+    namespace: ref.watch(appProfileProvider).preferenceNamespace,
+    backend: MemoryPreferenceBackend(),
+  ),
+);
 
 /// The single on-device SQLite database. The database is the source of
 /// truth; no additional in-memory copy of items is kept anywhere.
 final databaseProvider = Provider<AppDatabase>((ref) {
-  final database = AppDatabase.open();
+  final database = AppDatabase(NativeDatabase.memory());
   ref.onDispose(() => database.close());
   return database;
 });
@@ -36,9 +70,13 @@ final channelRepositoryProvider = Provider<ChannelRepository>(
   (ref) => ChannelRepository(ref.watch(databaseProvider)),
 );
 
-final attachmentRepositoryProvider = Provider<AttachmentRepository>(
-  (ref) => AttachmentRepository(ref.watch(databaseProvider)),
-);
+final attachmentRepositoryProvider = Provider<AttachmentRepository>((ref) {
+  final storage = ref.watch(appStoragePathsProvider);
+  return AttachmentRepository(
+    ref.watch(databaseProvider),
+    storageRoot: storage.root,
+  );
+});
 
 final clipboardReaderProvider = Provider<ClipboardReaderGateway>(
   (ref) => const SystemClipboardReaderGateway(),
@@ -66,7 +104,14 @@ final quickStashControllerProvider = Provider<QuickStashController>((ref) {
 
 final quickStashSettingsRepositoryProvider =
     Provider<QuickStashSettingsRepository>(
-      (ref) => QuickStashSettingsRepository(MemoryQuickStashPreferenceStore()),
+      (ref) => QuickStashSettingsRepository(
+        SharedPreferencesQuickStashStore(
+          ref.watch(profiledPreferencesProvider),
+        ),
+        globalShortcutsEnabledByDefault: ref
+            .watch(appProfileProvider)
+            .globalShortcutsEnabledByDefault,
+      ),
     );
 
 final quickStashSettingsControllerProvider =
@@ -85,7 +130,9 @@ final quickStashSettingsControllerProvider =
 final quickChannelConfigurationRepositoryProvider =
     Provider<QuickChannelConfigurationRepository>(
       (ref) => QuickChannelConfigurationRepository(
-        MemoryQuickStashPreferenceStore(),
+        SharedPreferencesQuickStashStore(
+          ref.watch(profiledPreferencesProvider),
+        ),
       ),
     );
 
@@ -105,7 +152,11 @@ final quickChannelControllerProvider = Provider<QuickChannelController>((ref) {
 });
 
 final appearanceRepositoryProvider = Provider<AppearanceRepository>(
-  (ref) => AppearanceRepository(SharedPreferencesAppearancePreferences()),
+  (ref) => AppearanceRepository(
+    SharedPreferencesAppearancePreferences(
+      ref.watch(profiledPreferencesProvider),
+    ),
+  ),
 );
 
 final appearanceProvider =
@@ -116,7 +167,9 @@ final appearanceProvider =
 final desktopShellPreferencesRepositoryProvider =
     Provider<DesktopShellPreferencesRepository>(
       (ref) => DesktopShellPreferencesRepository(
-        SharedPreferencesDesktopShellPreferences(),
+        SharedPreferencesDesktopShellPreferences(
+          ref.watch(profiledPreferencesProvider),
+        ),
       ),
     );
 
