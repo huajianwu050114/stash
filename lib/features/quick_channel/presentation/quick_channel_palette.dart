@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/providers.dart';
+import '../../attachments/data/attachment_repository.dart';
 import '../../attachments/presentation/stash_image_drag_source.dart';
 import '../../items/data/item_document_codec.dart';
 import '../../items/domain/item.dart';
@@ -190,26 +191,55 @@ class _PaletteContents extends ConsumerWidget {
   }
 }
 
-class _PaletteImage extends ConsumerWidget {
+class _PaletteImage extends ConsumerStatefulWidget {
   const _PaletteImage({required this.attachmentId});
 
   final String attachmentId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_PaletteImage> createState() => _PaletteImageState();
+}
+
+class _PaletteImageState extends ConsumerState<_PaletteImage> {
+  late AttachmentRepository _repository;
+  late Future<Uint8List?> _bytes;
+
+  @override
+  void initState() {
+    super.initState();
+    _repository = ref.read(attachmentRepositoryProvider);
+    _bytes = _loadBytes();
+  }
+
+  @override
+  void didUpdateWidget(covariant _PaletteImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.attachmentId != widget.attachmentId) {
+      _bytes = _loadBytes();
+    }
+  }
+
+  Future<Uint8List?> _loadBytes() => _repository
+      .resolveAttachmentFile(widget.attachmentId)
+      .then((file) => file?.readAsBytes());
+
+  @override
+  Widget build(BuildContext context) {
     final repository = ref.watch(attachmentRepositoryProvider);
+    if (!identical(repository, _repository)) {
+      _repository = repository;
+      _bytes = _loadBytes();
+    }
     return StashImageDragSource(
-      key: Key('quick-channel-image-$attachmentId'),
-      attachmentId: attachmentId,
+      key: Key('quick-channel-image-${widget.attachmentId}'),
+      attachmentId: widget.attachmentId,
       repository: repository,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(10),
         child: ColoredBox(
           color: Theme.of(context).colorScheme.surfaceContainerHighest,
           child: FutureBuilder<Uint8List?>(
-            future: repository
-                .resolveAttachmentFile(attachmentId)
-                .then((file) => file?.readAsBytes()),
+            future: _bytes,
             builder: (context, snapshot) {
               final bytes = snapshot.data;
               if (bytes == null) {

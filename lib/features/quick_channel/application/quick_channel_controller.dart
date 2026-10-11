@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../../platform/global_hotkey/global_hotkey_service.dart';
 import '../../channels/data/channel_repository.dart';
+import '../../channels/domain/channel.dart';
 import '../../quick_stash/application/quick_stash_settings_controller.dart';
 import '../../quick_stash/domain/quick_stash_settings.dart';
 import '../data/quick_channel_configuration_repository.dart';
@@ -44,6 +45,9 @@ class QuickChannelController extends ChangeNotifier {
   final Map<String, String> _errors = {};
   final Map<String, QuickStashShortcut> _registeredShortcuts = {};
   Future<void>? _initialization;
+  StreamSubscription<List<Channel>>? _channelSubscription;
+  bool _reconcilingChannels = false;
+  List<Channel>? _pendingChannelSnapshot;
   bool _isLoading = true;
 
   List<QuickChannelConfiguration> get configurations =>
@@ -74,11 +78,16 @@ class QuickChannelController extends ChangeNotifier {
     final used = <QuickStashShortcut>[
       _quickStashSettings.settings.globalShortcut,
     ];
+    var configurationChanged = false;
     for (final configuration in loaded) {
       if (!configuration.quickPaletteEnabled) continue;
       final channel = await _channels.getChannelById(configuration.channelId);
       if (channel == null || channel.isDeleted) {
+        _configurations[configuration.channelId] = configuration.copyWith(
+          quickPaletteEnabled: false,
+        );
         _errors[configuration.channelId] = 'Channel is unavailable.';
+        configurationChanged = true;
         continue;
       }
       if (!configuration.globalShortcut.isValid ||
@@ -102,8 +111,64 @@ class QuickChannelController extends ChangeNotifier {
       }
       used.add(configuration.globalShortcut);
     }
+    if (configurationChanged) {
+      try {
+        await _repository.save(_configurations.values);
+      } catch (_) {
+        // The stale shortcut stays disabled in memory and will be reconciled
+        // again next launch if device preferences are temporarily unavailable.
+      }
+    }
+    if (_hotkeys.isSupported) {
+      _channelSubscription = _channels.watchActiveChannels().listen(
+        (channels) => unawaited(_reconcileActiveChannels(channels)),
+      );
+    }
     _isLoading = false;
     notifyListeners();
+  }
+
+  Future<void> _reconcileActiveChannels(List<Channel> channels) async {
+    if (_reconcilingChannels) {
+      _pendingChannelSnapshot = channels;
+      return;
+    }
+    final activeIds = channels.map((channel) => channel.id).toSet();
+    final unavailable = _configurations.values
+        .where(
+          (configuration) =>
+              configuration.quickPaletteEnabled &&
+              !activeIds.contains(configuration.channelId),
+        )
+        .toList(growable: false);
+    if (unavailable.isEmpty) return;
+
+    _reconcilingChannels = true;
+    try {
+      for (final configuration in unavailable) {
+        final registered = _registeredShortcuts.remove(configuration.channelId);
+        if (_hotkeys.isSupported && registered != null) {
+          await _hotkeys.unregister(registered);
+        }
+        _configurations[configuration.channelId] = configuration.copyWith(
+          quickPaletteEnabled: false,
+        );
+        _errors[configuration.channelId] = 'Channel is unavailable.';
+      }
+      try {
+        await _repository.save(_configurations.values);
+      } catch (_) {
+        for (final configuration in unavailable) {
+          _errors[configuration.channelId] = 'Channel is unavailable; preference update will retry next launch.';
+        }
+      }
+      notifyListeners();
+    } finally {
+      _reconcilingChannels = false;
+      final pending = _pendingChannelSnapshot;
+      _pendingChannelSnapshot = null;
+      if (pending != null) unawaited(_reconcileActiveChannels(pending));
+    }
   }
 
   Future<bool> configure(String channelId, QuickStashShortcut shortcut) async {
@@ -217,6 +282,7 @@ class QuickChannelController extends ChangeNotifier {
   @override
   void dispose() {
     _quickStashSettings.setShortcutConflictChecker(null);
+    unawaited(_channelSubscription?.cancel());
     if (_hotkeys.isSupported) {
       for (final shortcut in _registeredShortcuts.values) {
         unawaited(_hotkeys.unregister(shortcut));

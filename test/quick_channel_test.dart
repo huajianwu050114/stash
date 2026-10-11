@@ -152,6 +152,44 @@ void main() {
     controller.dispose();
   });
 
+  test(
+    'deleting a configured Channel releases and disables its shortcut',
+    () async {
+      final channel = await channels.createRootChannel(
+        id: 'temporary',
+        name: 'Temporary',
+      );
+      const f9 = QuickStashShortcut(keyId: 0x00070042, keyLabel: 'F9');
+      final repository = QuickChannelConfigurationRepository(store);
+      final controller = QuickChannelController(
+        repository: repository,
+        channels: channels,
+        hotkeys: hotkeys,
+        quickStashSettings: quickStashSettings,
+        onGlobalShortcut: (_) {},
+      );
+      await controller.initialize();
+      expect(await controller.configure(channel.id, f9), isTrue);
+
+      await channels.softDeleteChannel(channel.id);
+      for (var attempt = 0; attempt < 20; attempt++) {
+        if (controller.configurationFor(channel.id)?.quickPaletteEnabled ==
+            false) {
+          break;
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+
+      expect(
+        controller.configurationFor(channel.id)?.quickPaletteEnabled,
+        isFalse,
+      );
+      expect(hotkeys.unregistered, contains(f9));
+      expect((await repository.load()).single.quickPaletteEnabled, isFalse);
+      controller.dispose();
+    },
+  );
+
   testWidgets('palette loads an image grid and text fallback', (tester) async {
     final items = ItemRepository(db);
     final channel = await channels.createRootChannel(
