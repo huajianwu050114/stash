@@ -11,8 +11,11 @@ import 'package:stash/app/appearance.dart';
 import 'package:stash/app/providers.dart';
 import 'package:stash/core/database/app_database.dart';
 import 'package:stash/features/attachments/data/attachment_repository.dart';
+import 'package:stash/features/attachments/data/file_attachment_ingestor.dart';
+import 'package:stash/features/attachments/data/file_import_sources.dart';
 import 'package:stash/features/attachments/data/image_import_sources.dart';
-import 'package:stash/features/attachments/presentation/image_drop_region.dart';
+import 'package:stash/features/attachments/presentation/attachment_drop_region.dart';
+import 'package:stash/features/items/data/item_document_codec.dart';
 import 'package:stash/features/quick_stash/application/quick_stash_controller.dart';
 import 'package:stash/features/quick_stash/application/quick_stash_settings_controller.dart';
 import 'package:stash/features/quick_stash/data/quick_stash_settings_repository.dart';
@@ -30,6 +33,7 @@ void main() {
   late QuickStashController quickStash;
   late QuickStashSettingsController settings;
   late _FakeImagePicker picker;
+  late _FakeFilePicker filePicker;
   late _FakeClipboard clipboard;
 
   setUp(() async {
@@ -48,6 +52,7 @@ void main() {
     );
     await settings.initialize();
     picker = _FakeImagePicker();
+    filePicker = _FakeFilePicker();
     clipboard = _FakeClipboard();
   });
 
@@ -74,6 +79,7 @@ void main() {
           databaseProvider.overrideWithValue(db),
           attachmentRepositoryProvider.overrideWithValue(attachments),
           imagePickerProvider.overrideWithValue(picker),
+          filePickerProvider.overrideWithValue(filePicker),
           clipboardReaderProvider.overrideWithValue(clipboard),
           quickStashControllerProvider.overrideWithValue(quickStash),
           quickStashSettingsControllerProvider.overrideWithValue(settings),
@@ -86,7 +92,10 @@ void main() {
     );
     await pumpUi(tester);
     expect(find.byKey(const Key('quick-content-field')), findsOneWidget);
-    expect(find.byKey(const Key('quick-image-drop-region')), findsOneWidget);
+    expect(
+      find.byKey(const Key('quick-attachment-drop-region')),
+      findsOneWidget,
+    );
   }
 
   testWidgets('text plus Enter saves exactly one item and resets session', (
@@ -128,7 +137,10 @@ void main() {
 
     expect(await db.select(db.items).get(), isEmpty);
     expect(window.hideCalls, 0);
-    expect(find.text('Add text or an image before saving.'), findsOneWidget);
+    expect(
+      find.text('Add text or an attachment before saving.'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('image-only Enter saves an Inbox item', (tester) async {
@@ -144,6 +156,75 @@ void main() {
     expect(item.channelId, isNull);
     expect(item.documentJson, contains(attachment.id));
     expect(window.hideCalls, 1);
+  });
+
+  testWidgets('dropped PDF plus Enter saves a file-only Inbox item', (
+    tester,
+  ) async {
+    final source = File(
+      '${supportDirectory.path}${Platform.pathSeparator}quick-paper.pdf',
+    );
+    source.writeAsBytesSync([1, 2, 3]);
+    await pumpApp(tester);
+    final dropRegion = tester.widget<AttachmentDropRegion>(
+      find.byKey(const Key('quick-attachment-drop-region')),
+    );
+
+    await tester.runAsync(
+      () => dropRegion.onFilesDropped([
+        ImportedFileData.localFile(source, fileName: 'paper.pdf'),
+      ]),
+    );
+    await pumpUi(tester);
+    final attachment = await db.select(db.attachments).getSingle();
+    expect(find.byKey(Key('attachment-file-${attachment.id}')), findsOneWidget);
+
+    await pressKey(tester, LogicalKeyboardKey.enter);
+
+    final item = await db.select(db.items).getSingle();
+    expect(item.content, isEmpty);
+    expect(item.documentJson, contains(attachment.id));
+    expect(window.hideCalls, 1);
+  });
+
+  testWidgets('multiple dropped files keep focus and coexist with text', (
+    tester,
+  ) async {
+    final first = File(
+      '${supportDirectory.path}${Platform.pathSeparator}first.docx',
+    );
+    final second = File(
+      '${supportDirectory.path}${Platform.pathSeparator}second.zip',
+    );
+    first.writeAsBytesSync([1]);
+    second.writeAsBytesSync([2]);
+    await pumpApp(tester);
+    enterQuickText(tester, 'references');
+    final dropRegion = tester.widget<AttachmentDropRegion>(
+      find.byKey(const Key('quick-attachment-drop-region')),
+    );
+
+    await tester.runAsync(
+      () => dropRegion.onFilesDropped([
+        ImportedFileData.localFile(first, fileName: 'first.docx'),
+        ImportedFileData.localFile(second, fileName: 'second.zip'),
+      ]),
+    );
+    await pumpUi(tester);
+
+    expect(quickEditor(tester).focusNode.hasFocus, isTrue);
+    expect(await db.select(db.attachments).get(), hasLength(2));
+    await pressKey(tester, LogicalKeyboardKey.enter);
+    final item = await db.select(db.items).getSingle();
+    expect(item.content, 'references');
+    final document = const ItemDocumentCodec().decode(
+      documentJson: item.documentJson,
+      legacyText: item.content,
+    );
+    expect(
+      const ItemDocumentCodec().snapshot(document).fileAttachmentIds,
+      hasLength(2),
+    );
   });
 
   testWidgets('text paste restores focus and Enter submits without repair', (
@@ -184,8 +265,8 @@ void main() {
       const TextSelection.collapsed(offset: 5),
       ChangeSource.local,
     );
-    final dropRegion = tester.widget<ImageDropRegion>(
-      find.byKey(const Key('quick-image-drop-region')),
+    final dropRegion = tester.widget<AttachmentDropRegion>(
+      find.byKey(const Key('quick-attachment-drop-region')),
     );
 
     await Future<void>.sync(() => dropRegion.onTextDropped!(' dropped'));
@@ -722,6 +803,13 @@ class _FakeImagePicker implements ImagePickerGateway {
     await Future<void>.delayed(Duration.zero);
     return image;
   }
+}
+
+class _FakeFilePicker implements FilePickerGateway {
+  List<ImportedFileData> files = const [];
+
+  @override
+  Future<List<ImportedFileData>> pickFiles() async => files;
 }
 
 class _FakeClipboard implements ClipboardReaderGateway {

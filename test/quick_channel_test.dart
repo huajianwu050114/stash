@@ -1,9 +1,12 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stash/app/providers.dart';
 import 'package:stash/core/database/app_database.dart';
+import 'package:stash/features/attachments/data/attachment_repository.dart';
 import 'package:stash/features/channels/data/channel_repository.dart';
 import 'package:stash/features/items/data/item_document_codec.dart';
 import 'package:stash/features/items/data/item_repository.dart';
@@ -293,6 +296,84 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Thanks!'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(Duration.zero);
+  });
+
+  testWidgets('palette separates generic files from text and image grid', (
+    tester,
+  ) async {
+    final supportDirectory = Directory.systemTemp.createTempSync(
+      'stash-quick-channel-files-',
+    );
+    addTearDown(() {
+      if (supportDirectory.existsSync()) {
+        supportDirectory.deleteSync(recursive: true);
+      }
+    });
+    final attachments = AttachmentRepository(db, storageRoot: supportDirectory);
+    final items = ItemRepository(db);
+    final channel = await channels.createRootChannel(
+      id: 'file-palette',
+      name: 'Research',
+    );
+    final source = File(
+      '${supportDirectory.path}${Platform.pathSeparator}paper.pdf',
+    );
+    source.writeAsBytesSync([1, 2, 3]);
+    final attachment = (await tester.runAsync(
+      () => attachments.importFile(
+        id: 'palette-file',
+        itemId: 'file-item',
+        sourceFile: source,
+        originalFileName: 'paper.pdf',
+      ),
+    ))!;
+    final document = Document.fromJson([
+      {'insert': BlockEmbed.custom(StashFileEmbed(attachment.id)).toJson()},
+      {'insert': '\n'},
+    ]);
+    await tester.runAsync(() async {
+      await items.createItem(
+        id: 'file-item',
+        channelId: channel.id,
+        document: const ItemDocumentCodec().snapshot(document),
+      );
+      await items.createItem(
+        id: 'plain-text',
+        channelId: channel.id,
+        content: 'A note',
+      );
+    });
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          databaseProvider.overrideWithValue(db),
+          attachmentRepositoryProvider.overrideWithValue(attachments),
+        ],
+        child: const MaterialApp(
+          home: QuickChannelPalette(channelId: 'file-palette'),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 50)),
+    );
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(find.text('Files'), findsOneWidget);
+    expect(
+      find.byKey(const Key('quick-channel-file-palette-file')),
+      findsOneWidget,
+    );
+    expect(find.text('paper.pdf'), findsOneWidget);
+    expect(
+      find.byKey(const Key('quick-channel-text-plain-text')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('quick-channel-text-file-item')), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(Duration.zero);
   });

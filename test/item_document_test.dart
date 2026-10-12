@@ -34,7 +34,7 @@ void main() {
     expect(snapshot.documentJson, contains('"format":"quill-delta"'));
   });
 
-  test('image-only is valid while empty and whitespace-only are invalid', () {
+  test('image and file snapshots track all attachment kinds', () {
     final image = Document.fromJson([
       {
         'insert': BlockEmbed.custom(const StashImageEmbed('attachment'))
@@ -42,12 +42,54 @@ void main() {
       },
       {'insert': '\n'},
     ]);
-    expect(codec.snapshot(image).hasMeaningfulBody, isTrue);
+    final file = Document.fromJson([
+      {'insert': BlockEmbed.custom(const StashFileEmbed('file-id')).toJson()},
+      {'insert': '\n'},
+    ]);
+    final mixed = Document.fromJson([
+      {'insert': 'notes'},
+      {'insert': BlockEmbed.custom(const StashImageEmbed('image-id')).toJson()},
+      {'insert': BlockEmbed.custom(const StashFileEmbed('file-one')).toJson()},
+      {'insert': BlockEmbed.custom(const StashFileEmbed('file-two')).toJson()},
+      {'insert': '\n'},
+    ]);
+    final imageSnapshot = codec.snapshot(image);
+    expect(imageSnapshot.hasMeaningfulBody, isTrue);
+    expect(imageSnapshot.imageAttachmentIds, {'attachment'});
+    expect(imageSnapshot.fileAttachmentIds, isEmpty);
+    final fileSnapshot = codec.snapshot(file);
+    expect(fileSnapshot.hasMeaningfulBody, isTrue);
+    expect(fileSnapshot.imageAttachmentIds, isEmpty);
+    expect(fileSnapshot.fileAttachmentIds, {'file-id'});
+    expect(fileSnapshot.attachmentIds, {'file-id'});
+    final mixedSnapshot = codec.snapshot(mixed);
+    expect(mixedSnapshot.plainText, 'notes');
+    expect(mixedSnapshot.imageAttachmentIds, {'image-id'});
+    expect(mixedSnapshot.fileAttachmentIds, {'file-one', 'file-two'});
+    expect(mixedSnapshot.attachmentIds, {'image-id', 'file-one', 'file-two'});
     expect(codec.snapshot(Document()).hasMeaningfulBody, isFalse);
     expect(
       codec.snapshot(codec.fromPlainText('  \n\t')).hasMeaningfulBody,
       isFalse,
     );
+  });
+
+  test('old stash-image document still decodes unchanged', () {
+    final original = Document.fromJson([
+      {
+        'insert': BlockEmbed.custom(const StashImageEmbed('legacy-image'))
+            .toJson(),
+      },
+      {'insert': '\n'},
+    ]);
+    final encoded = codec.snapshot(original);
+    final decoded = codec.decode(
+      documentJson: encoded.documentJson,
+      legacyText: 'ignored',
+    );
+
+    expect(codec.snapshot(decoded).imageAttachmentIds, {'legacy-image'});
+    expect(codec.snapshot(decoded).fileAttachmentIds, isEmpty);
   });
 
   group('document repository persistence', () {
@@ -84,7 +126,7 @@ void main() {
     );
 
     test(
-      'image-only document is valid but empty documents are rejected',
+      'attachment-only documents are valid but empty documents are rejected',
       () async {
         final image = Document.fromJson([
           {
@@ -95,6 +137,16 @@ void main() {
         ]);
         final created = await items.createItem(document: codec.snapshot(image));
         expect(created.content, isEmpty);
+
+        final file = Document.fromJson([
+          {
+            'insert': BlockEmbed.custom(const StashFileEmbed('file-id'))
+                .toJson(),
+          },
+          {'insert': '\n'},
+        ]);
+        final fileItem = await items.createItem(document: codec.snapshot(file));
+        expect(fileItem.content, isEmpty);
 
         await expectLater(
           items.createItem(document: codec.snapshot(Document())),

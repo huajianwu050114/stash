@@ -117,6 +117,24 @@ void main() {
       File(path.join(stableStorage.root.path, dev.relativePath)).existsSync(),
       isFalse,
     );
+
+    final source = File(path.join(temporarySupport.path, 'dev-document.pdf'));
+    await source.writeAsBytes([7, 8, 9]);
+    final devFile = await devAttachments.importFile(
+      id: 'dev-file',
+      itemId: 'future-dev-item',
+      sourceFile: source,
+    );
+    expect(
+      File(path.join(devStorage.root.path, devFile.relativePath)).existsSync(),
+      isTrue,
+    );
+    expect(
+      File(path.join(stableStorage.root.path, devFile.relativePath))
+          .existsSync(),
+      isFalse,
+    );
+    expect(await source.exists(), isTrue);
   });
 
   test('device preferences remain profile-specific after reload', () async {
