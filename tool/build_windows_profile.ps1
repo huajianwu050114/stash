@@ -39,8 +39,19 @@ try {
     $commit = (git rev-parse HEAD).Trim()
     $builtAt = [DateTimeOffset]::Now.ToString('o')
     $profileLabel = $Profile.ToUpperInvariant()
+    $pubspecContent = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'pubspec.yaml')
+    $versionMatch = [regex]::Match($pubspecContent, '(?m)^version:\s*([^\s#]+)')
+    if (-not $versionMatch.Success) {
+        throw 'Unable to read the product version from pubspec.yaml.'
+    }
+    $productVersion = $versionMatch.Groups[1].Value
+    $channel = if ($Profile -eq 'stable') { 'Personal Alpha' } else { 'Development' }
     $buildInfo = @(
+        'Product: Stash'
+        "Channel: $channel"
+        "Version: $productVersion"
         "Profile: $profileLabel"
+        "Entrypoint: $Target"
         "Branch: $branch"
         "Commit: $commit"
         "Built at: $builtAt"
