@@ -131,6 +131,7 @@ class _ItemDetail extends ConsumerWidget {
                   documentJson: item.documentJson,
                   legacyText: item.content,
                   attachmentRepository: ref.watch(attachmentRepositoryProvider),
+                  fileActions: ref.watch(attachmentFileActionsProvider),
                 ),
                 if (item.note case final note?) ...[
                   if (note.trim().isNotEmpty) ...[

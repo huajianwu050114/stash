@@ -449,7 +449,7 @@ class ItemRepository {
       throw ArgumentError.value(
         document.documentJson,
         'document',
-        'must contain text or an image',
+        'must contain text or an attachment',
       );
     }
     return document;

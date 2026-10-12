@@ -9,10 +9,14 @@ import 'package:uuid/uuid.dart';
 
 import '../../../app/providers.dart';
 import '../../../app/dev_profile_badge.dart';
+import '../../../platform/attachment_file_actions/attachment_file_actions.dart';
 import '../../attachments/data/attachment_repository.dart';
+import '../../attachments/data/file_attachment_ingestor.dart';
+import '../../attachments/data/file_import_sources.dart';
 import '../../attachments/data/image_attachment_ingestor.dart';
 import '../../attachments/data/image_import_sources.dart';
-import '../../attachments/presentation/image_drop_region.dart';
+import '../../attachments/presentation/attachment_drop_region.dart';
+import '../../attachments/presentation/stash_file_embed_builder.dart';
 import '../../attachments/presentation/stash_image_embed_builder.dart';
 import '../../items/data/item_document_codec.dart';
 import '../application/quick_stash_controller.dart';
@@ -35,8 +39,11 @@ class _QuickStashScreenState extends ConsumerState<QuickStashScreen> {
   late final ScrollController _documentScrollController;
   late final AttachmentRepository _attachments;
   late final ImageAttachmentIngestor _imageIngestor;
+  late final FileAttachmentIngestor _fileIngestor;
   late final ClipboardReaderGateway _clipboard;
   late final ImagePickerGateway _imagePicker;
+  late final FilePickerGateway _filePicker;
+  late final AttachmentFileActions _fileActions;
   late final QuickStashController _quickStash;
   final Set<String> _sessionAttachmentIds = {};
   TextSelection _lastValidSelection = const TextSelection.collapsed(offset: 0);
@@ -51,8 +58,11 @@ class _QuickStashScreenState extends ConsumerState<QuickStashScreen> {
     super.initState();
     _attachments = ref.read(attachmentRepositoryProvider);
     _imageIngestor = ImageAttachmentIngestor(_attachments);
+    _fileIngestor = FileAttachmentIngestor(_attachments);
     _clipboard = ref.read(clipboardReaderProvider);
     _imagePicker = ref.read(imagePickerProvider);
+    _filePicker = ref.read(filePickerProvider);
+    _fileActions = ref.read(attachmentFileActionsProvider);
     _quickStash = ref.read(quickStashControllerProvider);
     _activationGeneration = _quickStash.activationGeneration;
     _quickStash.addListener(_handleQuickStashActivation);
@@ -119,7 +129,7 @@ class _QuickStashScreenState extends ConsumerState<QuickStashScreen> {
     if (_saving) return false;
     final snapshot = _snapshot;
     if (!snapshot.hasMeaningfulBody) {
-      setState(() => _message = 'Add text or an image before saving.');
+      setState(() => _message = 'Add text or an attachment before saving.');
       return false;
     }
     setState(() {
@@ -130,9 +140,7 @@ class _QuickStashScreenState extends ConsumerState<QuickStashScreen> {
       await ref
           .read(itemRepositoryProvider)
           .createItem(id: _itemId, document: snapshot, channelId: null);
-      final unused = _sessionAttachmentIds.difference(
-        snapshot.imageAttachmentIds,
-      );
+      final unused = _sessionAttachmentIds.difference(snapshot.attachmentIds);
       if (unused.isNotEmpty) {
         try {
           await _attachments.cleanupStagedAttachments(unused);
@@ -225,6 +233,23 @@ class _QuickStashScreenState extends ConsumerState<QuickStashScreen> {
     }
   }
 
+  Future<void> _insertPickedFiles() async {
+    final insertionSelection = _documentController.selection;
+    try {
+      final files = await _filePicker.pickFiles();
+      if (files.isNotEmpty) {
+        await _importAndInsertFiles(
+          files,
+          insertionSelection: insertionSelection,
+        );
+      }
+    } catch (_) {
+      if (mounted) setState(() => _message = 'Could not attach these files.');
+    } finally {
+      _restoreEditorFocus(insertionSelection);
+    }
+  }
+
   Future<void> _paste() async {
     final insertionSelection = _documentController.selection;
     try {
@@ -280,10 +305,46 @@ class _QuickStashScreenState extends ConsumerState<QuickStashScreen> {
     await _importAndInsertImages(images, insertionSelection: selection);
   }
 
+  Future<void> _importAndInsertFiles(
+    List<ImportedFileData> files, {
+    TextSelection? insertionSelection,
+  }) async {
+    final imported = await _fileIngestor.importFiles(
+      itemId: _itemId,
+      files: files,
+    );
+    _sessionAttachmentIds.addAll(imported.map((attachment) => attachment.id));
+    final selection = _clampSelection(
+      insertionSelection ?? _documentController.selection,
+    );
+    var index = selection.start;
+    var length = selection.end - index;
+    for (final attachment in imported) {
+      _documentController.replaceText(
+        index,
+        length,
+        BlockEmbed.custom(StashFileEmbed(attachment.id)),
+        null,
+      );
+      index++;
+      length = 0;
+    }
+    _documentController.moveCursorToPosition(index);
+    if (mounted) setState(() {});
+    _restoreEditorFocus(_documentController.selection);
+  }
+
+  Future<void> _handleDroppedFiles(List<ImportedFileData> files) async {
+    final selection = _documentController.selection;
+    await _importAndInsertFiles(files, insertionSelection: selection);
+  }
+
   void _handleDroppedText(String text) => _insertText(text);
 
   void _showDropError() {
-    if (mounted) setState(() => _message = 'Could not import dropped image.');
+    if (mounted) {
+      setState(() => _message = 'Could not import dropped attachment.');
+    }
   }
 
   void _insertText(String text, {TextSelection? insertionSelection}) {
@@ -386,6 +447,10 @@ class _QuickStashScreenState extends ConsumerState<QuickStashScreen> {
   Widget build(BuildContext context) {
     final settings = ref.watch(quickStashSettingsControllerProvider);
     final imageBuilder = StashImageEmbedBuilder(_attachments);
+    final fileBuilder = StashFileEmbedBuilder(
+      _attachments,
+      fileActions: _fileActions,
+    );
     return ListenableBuilder(
       listenable: settings,
       builder: (context, _) {
@@ -431,9 +496,10 @@ class _QuickStashScreenState extends ConsumerState<QuickStashScreen> {
                   const SizedBox(height: 12),
                   Expanded(
                     child: LayoutBuilder(
-                      builder: (context, constraints) => ImageDropRegion(
-                        key: const Key('quick-image-drop-region'),
+                      builder: (context, constraints) => AttachmentDropRegion(
+                        key: const Key('quick-attachment-drop-region'),
                         onImagesDropped: _handleDroppedImages,
+                        onFilesDropped: _handleDroppedFiles,
                         onTextDropped: _handleDroppedText,
                         onError: _showDropError,
                         child: Listener(
@@ -470,7 +536,7 @@ class _QuickStashScreenState extends ConsumerState<QuickStashScreen> {
                                       vertical: 14,
                                     ),
                                     showCodeBlockLineNumbers: false,
-                                    embedBuilders: [imageBuilder],
+                                    embedBuilders: [imageBuilder, fileBuilder],
                                     // ignore: experimental_member_use
                                     onKeyPressed: (event, _) =>
                                         _handleKey(event, submitMode),
@@ -501,6 +567,12 @@ class _QuickStashScreenState extends ConsumerState<QuickStashScreen> {
                         tooltip: 'Insert image',
                         onPressed: _insertPickedImage,
                         icon: const Icon(Icons.image_outlined),
+                      ),
+                      IconButton(
+                        key: const Key('quick-attach-file'),
+                        tooltip: 'Attach file',
+                        onPressed: _insertPickedFiles,
+                        icon: const Icon(Icons.attach_file_rounded),
                       ),
                       const SizedBox(width: 4),
                       Expanded(

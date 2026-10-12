@@ -1,3 +1,7 @@
+import 'package:path/path.dart' as path;
+
+import 'attachment_type.dart';
+
 class Attachment {
   const Attachment({
     required this.id,
@@ -20,4 +24,18 @@ class Attachment {
   final DateTime? deletedAt;
 
   bool get isDeleted => deletedAt != null;
+
+  bool get isImage => attachmentKindFor(mimeType, originalFileName).isImage;
+
+  AttachmentKind get kind => attachmentKindFor(mimeType, originalFileName);
+
+  String get displayName {
+    final name = originalFileName?.trim();
+    return name == null || name.isEmpty ? 'File' : name;
+  }
+
+  String get extension {
+    final value = path.extension(displayName);
+    return value.isEmpty ? '' : value.substring(1).toUpperCase();
+  }
 }

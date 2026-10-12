@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 
 import '../../attachments/data/attachment_repository.dart';
+import '../../attachments/presentation/stash_file_embed_builder.dart';
 import '../../attachments/presentation/stash_image_embed_builder.dart';
+import '../../../platform/attachment_file_actions/attachment_file_actions.dart';
 import '../data/item_document_codec.dart';
 
 class ItemDocumentView extends StatefulWidget {
@@ -11,11 +13,13 @@ class ItemDocumentView extends StatefulWidget {
     required this.documentJson,
     required this.legacyText,
     required this.attachmentRepository,
+    required this.fileActions,
   });
 
   final String? documentJson;
   final String legacyText;
   final AttachmentRepository attachmentRepository;
+  final AttachmentFileActions fileActions;
 
   @override
   State<ItemDocumentView> createState() => _ItemDocumentViewState();
@@ -72,6 +76,11 @@ class _ItemDocumentViewState extends State<ItemDocumentView> {
           maxHeight: 340,
           cacheWidth: 840,
           expandWidth: false,
+        ),
+        StashFileEmbedBuilder(
+          widget.attachmentRepository,
+          fileActions: widget.fileActions,
+          maxWidth: 520,
         ),
       ],
     ),

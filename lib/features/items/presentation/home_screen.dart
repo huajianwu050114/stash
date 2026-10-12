@@ -958,15 +958,15 @@ class _ItemPreview extends StatelessWidget {
   final Item item;
   static const _codec = ItemDocumentCodec();
 
-  List<String> get _imageAttachmentIds {
+  ItemDocumentSnapshot? get _documentSnapshot {
     try {
       final document = _codec.decode(
         documentJson: item.documentJson,
         legacyText: item.content,
       );
-      return _codec.snapshot(document).imageAttachmentIds.toList();
+      return _codec.snapshot(document);
     } catch (_) {
-      return const [];
+      return null;
     }
   }
 
@@ -974,7 +974,10 @@ class _ItemPreview extends StatelessWidget {
   Widget build(BuildContext context) {
     final title = item.title?.trim();
     final desktop = MediaQuery.sizeOf(context).width >= 900;
-    final imageAttachmentIds = _imageAttachmentIds;
+    final snapshot = _documentSnapshot;
+    final imageAttachmentIds =
+        snapshot?.imageAttachmentIds.toList() ?? const [];
+    final fileAttachmentIds = snapshot?.fileAttachmentIds.toList() ?? const [];
     final preview = InkWell(
       key: Key('item-preview-${item.id}'),
       onTap: () => Navigator.of(context).push(
@@ -1001,6 +1004,11 @@ class _ItemPreview extends StatelessWidget {
                       maxLines: 3,
                       overflow: TextOverflow.ellipsis,
                     )
+                  else if (fileAttachmentIds.isNotEmpty)
+                    _ItemFileSummary(
+                      itemId: item.id,
+                      attachmentIds: fileAttachmentIds,
+                    )
                   else if (imageAttachmentIds.isNotEmpty)
                     Text(
                       imageAttachmentIds.length == 1
@@ -1010,6 +1018,14 @@ class _ItemPreview extends StatelessWidget {
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                     ),
+                  if (item.content.trim().isNotEmpty &&
+                      fileAttachmentIds.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    _ItemFileSummary(
+                      itemId: item.id,
+                      attachmentIds: fileAttachmentIds,
+                    ),
+                  ],
                   if (item.tags.isNotEmpty) ...[
                     const SizedBox(height: 8),
                     Text(
@@ -1035,6 +1051,45 @@ class _ItemPreview extends StatelessWidget {
     );
     return desktop ? StashItemDragSource(item: item, child: preview) : preview;
   }
+}
+
+class _ItemFileSummary extends ConsumerWidget {
+  const _ItemFileSummary({required this.itemId, required this.attachmentIds});
+
+  final String itemId;
+  final List<String> attachmentIds;
+
+  Future<String> _label(AttachmentRepository repository) async {
+    if (attachmentIds.length > 1) return '${attachmentIds.length} files';
+    final attachment = await repository.getAttachmentById(attachmentIds.single);
+    return attachment?.displayName ?? 'File unavailable';
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => FutureBuilder<String>(
+    future: _label(ref.watch(attachmentRepositoryProvider)),
+    initialData: attachmentIds.length == 1
+        ? '1 file'
+        : '${attachmentIds.length} files',
+    builder: (context, snapshot) => Row(
+      key: Key('item-file-summary-$itemId'),
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(Icons.attach_file_rounded, size: 16),
+        const SizedBox(width: 4),
+        Flexible(
+          child: Text(
+            snapshot.data!,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 class _ItemImageThumbnail extends ConsumerStatefulWidget {

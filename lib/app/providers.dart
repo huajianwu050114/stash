@@ -9,6 +9,7 @@ import '../core/database/app_database.dart';
 import '../core/preferences/profiled_preferences.dart';
 import '../core/storage/app_storage_paths.dart';
 import '../features/attachments/data/attachment_repository.dart';
+import '../features/attachments/data/file_import_sources.dart';
 import '../features/attachments/data/image_import_sources.dart';
 import '../features/channels/data/channel_repository.dart';
 import '../features/channels/domain/channel.dart';
@@ -20,6 +21,7 @@ import '../features/quick_stash/application/quick_stash_controller.dart';
 import '../features/quick_stash/application/quick_stash_settings_controller.dart';
 import '../features/quick_stash/data/quick_stash_settings_repository.dart';
 import '../platform/desktop_window/desktop_window_service.dart';
+import '../platform/attachment_file_actions/attachment_file_actions.dart';
 import '../platform/global_hotkey/global_hotkey_service.dart';
 import 'appearance.dart';
 import 'app_profile.dart';
@@ -84,6 +86,14 @@ final clipboardReaderProvider = Provider<ClipboardReaderGateway>(
 
 final imagePickerProvider = Provider<ImagePickerGateway>(
   (ref) => const FilePickerImageGateway(),
+);
+
+final filePickerProvider = Provider<FilePickerGateway>(
+  (ref) => const SystemFilePickerGateway(),
+);
+
+final attachmentFileActionsProvider = Provider<AttachmentFileActions>(
+  (ref) => const SystemAttachmentFileActions(),
 );
 
 final desktopWindowServiceProvider = Provider<DesktopWindowService>(

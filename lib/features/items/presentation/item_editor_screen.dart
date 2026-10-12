@@ -9,10 +9,14 @@ import 'package:uuid/uuid.dart';
 
 import '../../../app/providers.dart';
 import '../../attachments/data/attachment_repository.dart';
+import '../../attachments/data/file_attachment_ingestor.dart';
+import '../../attachments/data/file_import_sources.dart';
 import '../../attachments/data/image_attachment_ingestor.dart';
 import '../../attachments/data/image_import_sources.dart';
-import '../../attachments/presentation/image_drop_region.dart';
+import '../../attachments/presentation/attachment_drop_region.dart';
+import '../../attachments/presentation/stash_file_embed_builder.dart';
 import '../../attachments/presentation/stash_image_embed_builder.dart';
+import '../../../platform/attachment_file_actions/attachment_file_actions.dart';
 import '../data/item_document_codec.dart';
 import '../data/item_repository.dart';
 import '../domain/item.dart';
@@ -44,8 +48,11 @@ class _ItemEditorScreenState extends ConsumerState<ItemEditorScreen> {
   late final TextEditingController _tagsController;
   late final AttachmentRepository _attachments;
   late final ImageAttachmentIngestor _imageIngestor;
+  late final FileAttachmentIngestor _fileIngestor;
   late final ClipboardReaderGateway _clipboard;
   late final ImagePickerGateway _imagePicker;
+  late final FilePickerGateway _filePicker;
+  late final AttachmentFileActions _fileActions;
   final Set<String> _sessionAttachmentIds = {};
   bool _detailsExpanded = false;
   bool _formattingExpanded = false;
@@ -60,8 +67,11 @@ class _ItemEditorScreenState extends ConsumerState<ItemEditorScreen> {
     _itemId = item?.id ?? _uuid.v4();
     _attachments = ref.read(attachmentRepositoryProvider);
     _imageIngestor = ImageAttachmentIngestor(_attachments);
+    _fileIngestor = FileAttachmentIngestor(_attachments);
     _clipboard = ref.read(clipboardReaderProvider);
     _imagePicker = ref.read(imagePickerProvider);
+    _filePicker = ref.read(filePickerProvider);
+    _fileActions = ref.read(attachmentFileActionsProvider);
     _documentFocusNode = FocusNode(debugLabel: 'item-document');
     final document = _codec.decode(
       documentJson: item?.documentJson,
@@ -144,16 +154,14 @@ class _ItemEditorScreenState extends ConsumerState<ItemEditorScreen> {
         );
       }
       _saved = true;
-      final unused = _sessionAttachmentIds.difference(
-        snapshot.imageAttachmentIds,
-      );
-      if (unused.isNotEmpty) {
-        try {
-          await _attachments.cleanupStagedAttachments(unused);
-        } catch (_) {
-          // The Item is already durably saved. A later orphan-cleanup pass can
-          // retry removal without presenting a false save failure.
-        }
+      try {
+        await _attachments.cleanupUnreferencedAttachments(
+          itemId: _itemId,
+          referencedAttachmentIds: snapshot.attachmentIds,
+        );
+      } catch (_) {
+        // The Item is already durably saved. Keeping an unreferenced managed
+        // copy is safer than presenting a false save failure.
       }
       _popAfterStateUpdate();
     } catch (_) {
@@ -177,6 +185,20 @@ class _ItemEditorScreenState extends ConsumerState<ItemEditorScreen> {
     }
   }
 
+  Future<void> _insertPickedFiles() async {
+    try {
+      final files = await _filePicker.pickFiles();
+      if (files.isNotEmpty) await _importAndInsertFiles(files);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not attach these files.')),
+      );
+    } finally {
+      _documentFocusNode.requestFocus();
+    }
+  }
+
   Future<void> _discardStagedAndPop() async {
     if (_discarding) return;
     _discarding = true;
@@ -188,7 +210,7 @@ class _ItemEditorScreenState extends ConsumerState<ItemEditorScreen> {
       _discarding = false;
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not discard staged images.')),
+        const SnackBar(content: Text('Could not discard staged attachments.')),
       );
     }
   }
@@ -242,10 +264,34 @@ class _ItemEditorScreenState extends ConsumerState<ItemEditorScreen> {
     if (mounted) setState(() {});
   }
 
+  Future<void> _importAndInsertFiles(List<ImportedFileData> files) async {
+    final imported = await _fileIngestor.importFiles(
+      itemId: _itemId,
+      files: files,
+    );
+    _sessionAttachmentIds.addAll(imported.map((attachment) => attachment.id));
+    final selection = _documentController.selection;
+    var index = selection.start < 0 ? 0 : selection.start;
+    var length = selection.end < 0 ? 0 : selection.end - index;
+    for (final attachment in imported) {
+      _documentController.replaceText(
+        index,
+        length,
+        BlockEmbed.custom(StashFileEmbed(attachment.id)),
+        null,
+      );
+      index++;
+      length = 0;
+    }
+    _documentController.moveCursorToPosition(index);
+    _documentFocusNode.requestFocus();
+    if (mounted) setState(() {});
+  }
+
   void _showDropError() {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Could not import dropped image.')),
+      const SnackBar(content: Text('Could not import dropped attachment.')),
     );
   }
 
@@ -276,6 +322,10 @@ class _ItemEditorScreenState extends ConsumerState<ItemEditorScreen> {
   @override
   Widget build(BuildContext context) {
     final imageBuilder = StashImageEmbedBuilder(_attachments);
+    final fileBuilder = StashFileEmbedBuilder(
+      _attachments,
+      fileActions: _fileActions,
+    );
     return PopScope(
       canPop: _saved || _sessionAttachmentIds.isEmpty,
       onPopInvokedWithResult: (didPop, _) {
@@ -346,15 +396,26 @@ class _ItemEditorScreenState extends ConsumerState<ItemEditorScreen> {
                         onPressed: _insertPickedImage,
                         icon: const Icon(Icons.image_outlined),
                       ),
-                      const Spacer(),
-                      Text(
-                        'Paste text or images',
-                        style: Theme.of(context).textTheme.labelMedium
-                            ?.copyWith(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSurfaceVariant,
-                            ),
+                      IconButton(
+                        key: const Key('attach-file-button'),
+                        tooltip: 'Attach file',
+                        onPressed: _insertPickedFiles,
+                        icon: const Icon(Icons.attach_file_rounded),
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          'Paste text, images, or files',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.end,
+                          style: Theme.of(context).textTheme.labelMedium
+                              ?.copyWith(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                              ),
+                        ),
                       ),
                     ],
                   ),
@@ -384,9 +445,10 @@ class _ItemEditorScreenState extends ConsumerState<ItemEditorScreen> {
                         showDirection: false,
                       ),
                     ),
-                  ImageDropRegion(
-                    key: const Key('full-editor-image-drop-region'),
+                  AttachmentDropRegion(
+                    key: const Key('full-editor-attachment-drop-region'),
                     onImagesDropped: _importAndInsertImages,
+                    onFilesDropped: _importAndInsertFiles,
                     onTextDropped: _handleDroppedText,
                     onError: _showDropError,
                     child: QuillEditor.basic(
@@ -400,7 +462,7 @@ class _ItemEditorScreenState extends ConsumerState<ItemEditorScreen> {
                         placeholder: 'Start typing or paste anything…',
                         padding: const EdgeInsets.symmetric(vertical: 12),
                         showCodeBlockLineNumbers: false,
-                        embedBuilders: [imageBuilder],
+                        embedBuilders: [imageBuilder, fileBuilder],
                         // Flutter Quill 11.6 exposes this hook as experimental,
                         // but it is its supported boundary for overriding Ctrl+V.
                         // ignore: experimental_member_use

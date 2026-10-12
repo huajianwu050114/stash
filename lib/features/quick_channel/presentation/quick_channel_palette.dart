@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/providers.dart';
 import '../../../app/dev_profile_badge.dart';
 import '../../attachments/data/attachment_repository.dart';
+import '../../attachments/presentation/stash_file_embed_builder.dart';
 import '../../attachments/presentation/stash_image_drag_source.dart';
 import '../../items/data/item_document_codec.dart';
 import '../../items/domain/item.dart';
@@ -167,7 +168,9 @@ class _PaletteContentsState extends ConsumerState<_PaletteContents> {
       _resolvedImages = _resolveImages();
     }
     final partition = _partitionPaletteItems(widget.items);
-    if (_imageIds.isEmpty && partition.textItems.isEmpty) {
+    if (_imageIds.isEmpty &&
+        partition.files.isEmpty &&
+        partition.textItems.isEmpty) {
       return const _PaletteMessage('This Channel is empty.');
     }
 
@@ -240,11 +243,41 @@ class _PaletteContentsState extends ConsumerState<_PaletteContents> {
                   ),
                 ),
               ),
+            if (partition.files.isNotEmpty) ...[
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
+                sliver: SliverToBoxAdapter(
+                  child: Text(
+                    'Files',
+                    style: Theme.of(context).textTheme.labelLarge,
+                  ),
+                ),
+              ),
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                sliver: SliverList.separated(
+                  itemCount: partition.files.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 6),
+                  itemBuilder: (context, index) {
+                    final attachmentId = partition.files[index];
+                    return StashFileCard(
+                      key: Key('quick-channel-file-$attachmentId'),
+                      attachmentId: attachmentId,
+                      repository: repository,
+                      fileActions: ref.watch(attachmentFileActionsProvider),
+                      compact: true,
+                    );
+                  },
+                ),
+              ),
+            ],
             if (partition.textItems.isNotEmpty) ...[
               SliverPadding(
                 padding: EdgeInsets.fromLTRB(
                   16,
-                  images?.available.isEmpty ?? true ? 12 : 8,
+                  (images?.available.isEmpty ?? true) && partition.files.isEmpty
+                      ? 12
+                      : 8,
                   16,
                   6,
                 ),
@@ -342,11 +375,11 @@ class _PaletteImage extends ConsumerWidget {
   }
 }
 
-({List<String> images, List<Item> textItems}) _partitionPaletteItems(
-  List<Item> items,
-) {
+({List<String> images, List<String> files, List<Item> textItems})
+_partitionPaletteItems(List<Item> items) {
   const codec = ItemDocumentCodec();
   final images = <String>[];
+  final files = <String>[];
   final textItems = <Item>[];
   for (final item in items) {
     try {
@@ -354,17 +387,20 @@ class _PaletteImage extends ConsumerWidget {
         documentJson: item.documentJson,
         legacyText: item.content,
       );
-      final attachmentIds = codec.snapshot(document).imageAttachmentIds;
-      if (attachmentIds.isEmpty) {
+      final snapshot = codec.snapshot(document);
+      images.addAll(snapshot.imageAttachmentIds);
+      files.addAll(snapshot.fileAttachmentIds);
+      final hasText =
+          item.content.trim().isNotEmpty ||
+          (item.title?.trim().isNotEmpty ?? false);
+      if (hasText || snapshot.attachmentIds.isEmpty) {
         textItems.add(item);
-      } else {
-        images.addAll(attachmentIds);
       }
     } catch (_) {
       textItems.add(item);
     }
   }
-  return (images: images, textItems: textItems);
+  return (images: images, files: files, textItems: textItems);
 }
 
 class _PaletteMessage extends StatelessWidget {
