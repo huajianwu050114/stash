@@ -160,6 +160,42 @@ void main() {
     await disposeApp(tester);
   });
 
+  testWidgets('mixed item keeps text, file summary, and image thumbnail', (
+    tester,
+  ) async {
+    const codec = ItemDocumentCodec();
+    final snapshot = codec.snapshot(
+      Document.fromJson([
+        {'insert': 'Mixed body\n'},
+        {
+          'insert': BlockEmbed.custom(const StashFileEmbed('mixed-file'))
+              .toJson(),
+        },
+        {
+          'insert': BlockEmbed.custom(const StashImageEmbed('mixed-image'))
+              .toJson(),
+        },
+        {'insert': '\n'},
+      ]),
+    );
+    final item = await items.createItem(
+      id: 'mixed-preview',
+      content: snapshot.plainText,
+      document: snapshot,
+    );
+
+    await pumpApp(tester, size: const Size(1200, 800));
+
+    expect(find.textContaining('Mixed body'), findsOneWidget);
+    expect(find.byKey(Key('item-file-summary-${item.id}')), findsOneWidget);
+    expect(find.byKey(Key('item-thumbnail-${item.id}')), findsOneWidget);
+    expect(
+      tester.getSize(find.byKey(Key('item-thumbnail-${item.id}'))),
+      const Size.square(80),
+    );
+    await disposeApp(tester);
+  });
+
   testWidgets('detail moves an item and pinned view spans channels', (
     tester,
   ) async {
@@ -244,6 +280,164 @@ void main() {
     await disposeApp(tester);
   });
 
+  testWidgets(
+    'desktop sidebar resizes, persists on drag end, and restores after collapse',
+    (tester) async {
+      final preferences = _MemoryDesktopShellPreferences();
+      await pumpApp(
+        tester,
+        size: const Size(1200, 800),
+        shellPreferences: preferences,
+      );
+
+      final handle = find.byKey(const Key('desktop-sidebar-resize-handle'));
+      expect(handle, findsOneWidget);
+      final mouseRegion = tester.widget<MouseRegion>(
+        find.descendant(of: handle, matching: find.byType(MouseRegion)).first,
+      );
+      expect(mouseRegion.cursor, SystemMouseCursors.resizeColumn);
+
+      final resizeGesture = await tester.startGesture(tester.getCenter(handle));
+      await resizeGesture.moveBy(const Offset(20, 0));
+      await tester.pump();
+      await resizeGesture.moveBy(const Offset(80, 0));
+      await tester.pump();
+      final resizedWidth = tester
+          .getSize(find.byKey(const Key('desktop-sidebar')))
+          .width;
+      expect(resizedWidth, greaterThan(216));
+      expect(
+        await preferences.getDouble(
+          DesktopShellPreferencesRepository.sidebarExpandedWidthKey,
+        ),
+        isNull,
+      );
+      await resizeGesture.up();
+      await pumpUi(tester);
+      expect(
+        await preferences.getDouble(
+          DesktopShellPreferencesRepository.sidebarExpandedWidthKey,
+        ),
+        closeTo(resizedWidth, 1),
+      );
+
+      await tester.tap(find.byKey(const Key('collapse-sidebar')));
+      await pumpUi(tester);
+      expect(
+        tester.getSize(find.byKey(const Key('desktop-sidebar'))).width,
+        DesktopSidebarDimensions.collapsedWidth,
+      );
+      expect(handle, findsNothing);
+      await tester.tap(find.byKey(const Key('expand-sidebar')));
+      await pumpUi(tester);
+      expect(
+        tester.getSize(find.byKey(const Key('desktop-sidebar'))).width,
+        closeTo(resizedWidth, 1),
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      await pumpApp(
+        tester,
+        size: const Size(1200, 800),
+        shellPreferences: preferences,
+      );
+      expect(
+        tester.getSize(find.byKey(const Key('desktop-sidebar'))).width,
+        closeTo(resizedWidth, 1),
+      );
+      await tester.tap(find.byKey(const Key('desktop-sidebar-resize-handle')));
+      await tester.pump(const Duration(milliseconds: 40));
+      await tester.tap(find.byKey(const Key('desktop-sidebar-resize-handle')));
+      await pumpUi(tester);
+      expect(
+        tester.getSize(find.byKey(const Key('desktop-sidebar'))).width,
+        DesktopSidebarDimensions.defaultExpandedWidth,
+      );
+      await disposeApp(tester);
+    },
+  );
+
+  testWidgets('desktop sidebar clamps at the responsive threshold', (
+    tester,
+  ) async {
+    final preferences = _MemoryDesktopShellPreferences();
+    await preferences.setDouble(
+      DesktopShellPreferencesRepository.sidebarExpandedWidthKey,
+      900,
+    );
+    await pumpApp(
+      tester,
+      size: const Size(900, 700),
+      shellPreferences: preferences,
+    );
+
+    expect(find.byKey(const Key('wide-browser')), findsOneWidget);
+    expect(
+      tester.getSize(find.byKey(const Key('desktop-sidebar'))).width,
+      DesktopSidebarDimensions.maximumExpandedWidth,
+    );
+    expect(tester.takeException(), isNull);
+    await disposeApp(tester);
+  });
+
+  testWidgets(
+    'item list uses rounded clipped surfaces, spacing, and max width',
+    (tester) async {
+      final first = await items.createItem(
+        id: 'surface-one',
+        title: 'First',
+        content: 'First body',
+        tags: const ['alpha'],
+      );
+      await items.createItem(id: 'surface-two', content: 'Second body');
+      await pumpApp(tester, size: const Size(1200, 800));
+
+      final surfaceFinder = find.byKey(Key('item-surface-${first.id}'));
+      final surface = tester.widget<Material>(surfaceFinder);
+      expect(surface.clipBehavior, Clip.antiAlias);
+      final shape = surface.shape! as RoundedRectangleBorder;
+      expect(shape.borderRadius, const BorderRadius.all(Radius.circular(10)));
+      final ink = tester.widget<InkWell>(
+        find.descendant(of: surfaceFinder, matching: find.byType(InkWell)),
+      );
+      expect(ink.borderRadius, const BorderRadius.all(Radius.circular(10)));
+      expect(ink.hoverColor, isNotNull);
+      expect(ink.splashColor, isNotNull);
+      expect(find.byKey(const Key('item-row-gap')), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('item-list-content')),
+          matching: find.byType(Divider),
+        ),
+        findsNothing,
+      );
+      expect(
+        tester.getSize(find.byKey(const Key('item-list-content'))).width,
+        860,
+      );
+      await disposeApp(tester);
+    },
+  );
+
+  testWidgets('item list uses the available width on narrow screens', (
+    tester,
+  ) async {
+    await items.createItem(id: 'narrow-surface', content: 'Narrow body');
+    await pumpApp(tester, size: const Size(430, 800));
+
+    expect(
+      tester.getSize(find.byKey(const Key('item-list-content'))).width,
+      inInclusiveRange(380, 398),
+    );
+    expect(
+      find.byKey(const Key('desktop-sidebar-resize-handle')),
+      findsNothing,
+    );
+    expect(tester.takeException(), isNull);
+    await disposeApp(tester);
+  });
+
   testWidgets('desktop whole-row drag moves an item to a channel and Inbox', (
     tester,
   ) async {
@@ -317,13 +511,21 @@ void main() {
 }
 
 class _MemoryDesktopShellPreferences implements DesktopShellPreferences {
-  final Map<String, bool> values = {};
+  final Map<String, Object> values = {};
 
   @override
-  Future<bool?> getBool(String key) async => values[key];
+  Future<bool?> getBool(String key) async => values[key] as bool?;
 
   @override
   Future<void> setBool(String key, bool value) async {
+    values[key] = value;
+  }
+
+  @override
+  Future<double?> getDouble(String key) async => values[key] as double?;
+
+  @override
+  Future<void> setDouble(String key, double value) async {
     values[key] = value;
   }
 }

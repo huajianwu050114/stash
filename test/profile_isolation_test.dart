@@ -150,8 +150,12 @@ void main() {
     );
     await stableShell.saveSidebarCollapsed(true);
     await devShell.saveSidebarCollapsed(false);
+    await stableShell.saveSidebarExpandedWidth(288);
+    await devShell.saveSidebarExpandedWidth(332);
     expect(await stableShell.loadSidebarCollapsed(), isTrue);
     expect(await devShell.loadSidebarCollapsed(), isFalse);
+    expect(await stableShell.loadSidebarExpandedWidth(), 288);
+    expect(await devShell.loadSidebarExpandedWidth(), 332);
 
     final stableAppearance = AppearanceRepository(
       SharedPreferencesAppearancePreferences(stable),
