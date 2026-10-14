@@ -1038,8 +1038,7 @@ class _ItemSection extends StatelessWidget {
           const SizedBox(height: 8),
           for (var index = 0; index < items.length; index++) ...[
             _ItemPreview(item: items[index]),
-            if (index != items.length - 1)
-              const SizedBox(key: Key('item-row-gap'), height: 8),
+            if (index != items.length - 1) const SizedBox(height: 8),
           ],
         ],
       ),

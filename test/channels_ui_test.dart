@@ -382,29 +382,46 @@ void main() {
   });
 
   testWidgets(
-    'item list uses rounded clipped surfaces, spacing, and max width',
+    'four-item section keeps rounded spacing, click, and whole-row drag',
     (tester) async {
-      final first = await items.createItem(
-        id: 'surface-one',
-        title: 'First',
-        content: 'First body',
-        tags: const ['alpha'],
+      final channel = await channels.createRootChannel(
+        id: 'multi-item-target',
+        name: 'Multi-item target',
       );
-      await items.createItem(id: 'surface-two', content: 'Second body');
+      final created = <String>[];
+      for (var index = 0; index < 4; index++) {
+        final item = await items.createItem(
+          id: 'surface-$index',
+          title: 'Item $index',
+          content: 'Body $index',
+          tags: index == 0 ? const ['alpha'] : const [],
+        );
+        created.add(item.id);
+      }
       await pumpApp(tester, size: const Size(1200, 800));
 
-      final surfaceFinder = find.byKey(Key('item-surface-${first.id}'));
-      final surface = tester.widget<Material>(surfaceFinder);
-      expect(surface.clipBehavior, Clip.antiAlias);
-      final shape = surface.shape! as RoundedRectangleBorder;
-      expect(shape.borderRadius, const BorderRadius.all(Radius.circular(10)));
-      final ink = tester.widget<InkWell>(
-        find.descendant(of: surfaceFinder, matching: find.byType(InkWell)),
-      );
-      expect(ink.borderRadius, const BorderRadius.all(Radius.circular(10)));
-      expect(ink.hoverColor, isNotNull);
-      expect(ink.splashColor, isNotNull);
-      expect(find.byKey(const Key('item-row-gap')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      final surfaceFinders = created
+          .map((id) => find.byKey(Key('item-surface-$id')))
+          .toList();
+      for (final surfaceFinder in surfaceFinders) {
+        expect(surfaceFinder, findsOneWidget);
+        final surface = tester.widget<Material>(surfaceFinder);
+        expect(surface.clipBehavior, Clip.antiAlias);
+        final shape = surface.shape! as RoundedRectangleBorder;
+        expect(shape.borderRadius, const BorderRadius.all(Radius.circular(10)));
+        final ink = tester.widget<InkWell>(
+          find.descendant(of: surfaceFinder, matching: find.byType(InkWell)),
+        );
+        expect(ink.borderRadius, const BorderRadius.all(Radius.circular(10)));
+        expect(ink.hoverColor, isNotNull);
+        expect(ink.splashColor, isNotNull);
+      }
+      final surfaceRects = surfaceFinders.map(tester.getRect).toList()
+        ..sort((first, second) => first.top.compareTo(second.top));
+      for (var index = 1; index < surfaceRects.length; index++) {
+        expect(surfaceRects[index].top - surfaceRects[index - 1].bottom, 8);
+      }
       expect(
         find.descendant(
           of: find.byKey(const Key('item-list-content')),
@@ -416,6 +433,24 @@ void main() {
         tester.getSize(find.byKey(const Key('item-list-content'))).width,
         860,
       );
+      for (final id in created) {
+        expect(find.byKey(Key('item-drag-source-$id')), findsOneWidget);
+      }
+
+      await tester.tap(find.byKey(Key('item-preview-${created.first}')));
+      await pumpUi(tester);
+      expect(find.byKey(const Key('move-item-button')), findsOneWidget);
+      await tester.pageBack();
+      await pumpUi(tester);
+
+      await dragTo(
+        tester,
+        find.byKey(Key('item-preview-${created.last}')),
+        find.byKey(Key('channel-${channel.id}')),
+      );
+      await pumpUi(tester);
+      expect((await items.getItemById(created.last))!.channelId, channel.id);
+      expect(tester.takeException(), isNull);
       await disposeApp(tester);
     },
   );
