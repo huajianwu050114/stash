@@ -9,17 +9,35 @@ import '../features/quick_stash/application/quick_stash_controller.dart';
 import '../features/quick_stash/presentation/quick_stash_screen.dart';
 import 'providers.dart';
 
-class StashApp extends ConsumerWidget {
+class StashApp extends ConsumerStatefulWidget {
   const StashApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<StashApp> createState() => _StashAppState();
+}
+
+class _StashAppState extends ConsumerState<StashApp> {
+  final _messengerKey = GlobalKey<ScaffoldMessengerState>();
+  bool _noticeScheduled = false;
+
+  @override
+  Widget build(BuildContext context) {
     final themeMode = ref.watch(appearanceProvider).value ?? ThemeMode.system;
     final profile = ref.watch(appProfileProvider);
     final quickStash = ref.watch(quickStashControllerProvider);
     ref.watch(quickStashSettingsControllerProvider);
     ref.watch(quickChannelControllerProvider);
+    final startupNotice = ref.watch(startupRestoreNoticeProvider);
+    if (startupNotice != null && !_noticeScheduled) {
+      _noticeScheduled = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _messengerKey.currentState?.showSnackBar(
+          SnackBar(content: Text(startupNotice)),
+        );
+      });
+    }
     return MaterialApp(
+      scaffoldMessengerKey: _messengerKey,
       title: profile.displayName,
       debugShowCheckedModeBanner: false,
       themeMode: themeMode,

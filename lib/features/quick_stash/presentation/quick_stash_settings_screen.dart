@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 
 import '../../../app/providers.dart';
+import '../../backup/presentation/backup_restore_section.dart';
 import '../../channels/domain/channel.dart';
 import '../../quick_channel/application/quick_channel_controller.dart';
 import '../domain/quick_stash_settings.dart';
@@ -84,6 +85,7 @@ class _QuickStashSettingsScreenState
     final profile = ref.watch(appProfileProvider);
     final settings = ref.watch(quickStashSettingsControllerProvider);
     final quickChannels = ref.watch(quickChannelControllerProvider);
+    final backupRestore = ref.watch(backupRestoreControllerProvider);
     final channels = ref.watch(activeChannelsProvider);
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
@@ -256,6 +258,11 @@ class _QuickStashSettingsScreenState
                       ),
                     ],
                   ),
+                ),
+                const SizedBox(height: 32),
+                BackupRestoreSection(
+                  controller: backupRestore,
+                  profile: profile,
                 ),
               ],
             ),

@@ -11,6 +11,13 @@ import '../core/storage/app_storage_paths.dart';
 import '../features/attachments/data/attachment_repository.dart';
 import '../features/attachments/data/file_import_sources.dart';
 import '../features/attachments/data/image_import_sources.dart';
+import '../features/backup/data/backup_archive.dart';
+import '../features/backup/data/backup_preferences.dart';
+import '../features/backup/data/backup_service.dart';
+import '../features/backup/data/backup_validator.dart';
+import '../features/backup/data/pending_restore_store.dart';
+import '../features/backup/data/restore_coordinator.dart';
+import '../features/backup/presentation/backup_restore_controller.dart';
 import '../features/channels/data/channel_repository.dart';
 import '../features/channels/domain/channel.dart';
 import '../features/items/data/item_repository.dart';
@@ -22,6 +29,7 @@ import '../features/quick_stash/application/quick_stash_settings_controller.dart
 import '../features/quick_stash/data/quick_stash_settings_repository.dart';
 import '../platform/desktop_window/desktop_window_service.dart';
 import '../platform/attachment_file_actions/attachment_file_actions.dart';
+import '../platform/backup/backup_platform.dart';
 import '../platform/global_hotkey/global_hotkey_service.dart';
 import 'appearance.dart';
 import 'app_profile.dart';
@@ -95,6 +103,75 @@ final filePickerProvider = Provider<FilePickerGateway>(
 final attachmentFileActionsProvider = Provider<AttachmentFileActions>(
   (ref) => const SystemAttachmentFileActions(),
 );
+
+final backupArchiveCodecProvider = Provider<BackupArchiveCodec>(
+  (ref) => const ZipBackupArchiveCodec(),
+);
+
+final backupFilePickerProvider = Provider<BackupFilePicker>(
+  (ref) => const SystemBackupFilePicker(),
+);
+
+final backupDirectoryResolverProvider = Provider<BackupDirectoryResolver>(
+  (ref) => const DocumentsBackupDirectoryResolver(),
+);
+
+final backupFolderActionsProvider = Provider<BackupFolderActions>(
+  (ref) => const SystemBackupFolderActions(),
+);
+
+final backupPreferencesProvider = Provider<BackupPreferences>(
+  (ref) => BackupPreferences(ref.watch(profiledPreferencesProvider)),
+);
+
+final backupValidatorProvider = Provider<BackupValidator>(
+  (ref) => BackupValidator(
+    archiveCodec: ref.watch(backupArchiveCodecProvider),
+    currentSchemaVersion: AppDatabase.currentSchemaVersion,
+  ),
+);
+
+final backupServiceProvider = Provider<BackupService>(
+  (ref) => BackupService(
+    profile: ref.watch(appProfileProvider),
+    storage: ref.watch(appStoragePathsProvider),
+    appVersion: '0.5.0+1',
+    currentSchemaVersion: AppDatabase.currentSchemaVersion,
+    archiveCodec: ref.watch(backupArchiveCodecProvider),
+  ),
+);
+
+final pendingRestoreStoreProvider = Provider<PendingRestoreStore>(
+  (ref) => PendingRestoreStore(storage: ref.watch(appStoragePathsProvider)),
+);
+
+final restoreCoordinatorProvider = Provider<RestoreCoordinator>(
+  (ref) => RestoreCoordinator(
+    storage: ref.watch(appStoragePathsProvider),
+    backupService: ref.watch(backupServiceProvider),
+    validator: ref.watch(backupValidatorProvider),
+    pendingStore: ref.watch(pendingRestoreStoreProvider),
+    backupDirectoryResolver: ref.watch(backupDirectoryResolverProvider),
+  ),
+);
+
+final backupRestoreControllerProvider = Provider<BackupRestoreController>((
+  ref,
+) {
+  final controller = BackupRestoreController(
+    backupService: ref.watch(backupServiceProvider),
+    restoreCoordinator: ref.watch(restoreCoordinatorProvider),
+    preferences: ref.watch(backupPreferencesProvider),
+    filePicker: ref.watch(backupFilePickerProvider),
+    directoryResolver: ref.watch(backupDirectoryResolverProvider),
+    folderActions: ref.watch(backupFolderActionsProvider),
+  );
+  unawaited(controller.initialize());
+  ref.onDispose(controller.dispose);
+  return controller;
+});
+
+final startupRestoreNoticeProvider = Provider<String?>((ref) => null);
 
 final desktopWindowServiceProvider = Provider<DesktopWindowService>(
   (ref) => const NoopDesktopWindowService(),
