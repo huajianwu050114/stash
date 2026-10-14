@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/desktop_shell_preferences.dart';
 import '../../../app/providers.dart';
 import '../../../app/dev_profile_badge.dart';
 import '../../attachments/data/attachment_repository.dart';
@@ -71,6 +72,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       final wide = constraints.maxWidth >= 900;
       final sidebarCollapsed =
           ref.watch(desktopSidebarCollapsedProvider).value ?? false;
+      final savedSidebarWidth =
+          ref.watch(desktopSidebarWidthProvider).value ??
+          DesktopSidebarDimensions.defaultExpandedWidth;
+      final viewportSidebarMaximum = (constraints.maxWidth - 480).clamp(
+        DesktopSidebarDimensions.minimumExpandedWidth,
+        DesktopSidebarDimensions.maximumExpandedWidth,
+      );
+      final expandedSidebarWidth = savedSidebarWidth.clamp(
+        DesktopSidebarDimensions.minimumExpandedWidth,
+        viewportSidebarMaximum,
+      );
       return Scaffold(
         appBar: AppBar(
           toolbarHeight: wide ? 48 : 60,
@@ -142,7 +154,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   children: [
                     SizedBox(
                       key: const Key('desktop-sidebar'),
-                      width: sidebarCollapsed ? 56 : 216,
+                      width: sidebarCollapsed
+                          ? DesktopSidebarDimensions.collapsedWidth
+                          : expandedSidebarWidth,
                       child: _RootPane(
                         compact: true,
                         collapsed: sidebarCollapsed,
@@ -157,7 +171,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             .setCollapsed(!sidebarCollapsed),
                       ),
                     ),
-                    const VerticalDivider(width: 1),
+                    if (sidebarCollapsed)
+                      const VerticalDivider(width: 1)
+                    else
+                      _DesktopSidebarResizeHandle(
+                        key: const Key('desktop-sidebar-resize-handle'),
+                        onDragUpdate: (delta) => ref
+                            .read(desktopSidebarWidthProvider.notifier)
+                            .previewWidth(expandedSidebarWidth + delta),
+                        onDragEnd: () => ref
+                            .read(desktopSidebarWidthProvider.notifier)
+                            .persistWidth(),
+                        onReset: () => ref
+                            .read(desktopSidebarWidthProvider.notifier)
+                            .resetWidth(),
+                      ),
                     Expanded(
                       child: switch (_selectedKind) {
                         _ViewKind.inbox => const _ItemsPane(
@@ -194,6 +222,64 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       );
     },
   );
+}
+
+class _DesktopSidebarResizeHandle extends StatefulWidget {
+  const _DesktopSidebarResizeHandle({
+    super.key,
+    required this.onDragUpdate,
+    required this.onDragEnd,
+    required this.onReset,
+  });
+
+  final ValueChanged<double> onDragUpdate;
+  final VoidCallback onDragEnd;
+  final VoidCallback onReset;
+
+  @override
+  State<_DesktopSidebarResizeHandle> createState() =>
+      _DesktopSidebarResizeHandleState();
+}
+
+class _DesktopSidebarResizeHandleState
+    extends State<_DesktopSidebarResizeHandle> {
+  bool _hovered = false;
+  bool _dragging = false;
+
+  void _finishDrag() {
+    if (_dragging) setState(() => _dragging = false);
+    widget.onDragEnd();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final dividerColor = _dragging
+        ? colorScheme.primary.withValues(alpha: 0.78)
+        : _hovered
+        ? colorScheme.outline.withValues(alpha: 0.72)
+        : Theme.of(context).dividerColor;
+    return MouseRegion(
+      cursor: SystemMouseCursors.resizeColumn,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onHorizontalDragStart: (_) => setState(() => _dragging = true),
+        onHorizontalDragUpdate: (details) =>
+            widget.onDragUpdate(details.delta.dx),
+        onHorizontalDragEnd: (_) => _finishDrag(),
+        onHorizontalDragCancel: _finishDrag,
+        onDoubleTap: widget.onReset,
+        child: SizedBox(
+          width: 8,
+          child: Center(
+            child: Container(width: _dragging ? 2 : 1, color: dividerColor),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _RootPane extends ConsumerWidget {
@@ -940,16 +1026,24 @@ class _ItemSection extends StatelessWidget {
   final List<Item> items;
 
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      Text(title, style: Theme.of(context).textTheme.titleSmall),
-      const SizedBox(height: 8),
-      for (var index = 0; index < items.length; index++) ...[
-        _ItemPreview(item: items[index]),
-        if (index != items.length - 1) const Divider(height: 1),
-      ],
-    ],
+  Widget build(BuildContext context) => Align(
+    alignment: Alignment.topLeft,
+    child: ConstrainedBox(
+      key: const Key('item-list-content'),
+      constraints: const BoxConstraints(maxWidth: 860),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(title, style: Theme.of(context).textTheme.titleSmall),
+          const SizedBox(height: 8),
+          for (var index = 0; index < items.length; index++) ...[
+            _ItemPreview(item: items[index]),
+            if (index != items.length - 1)
+              const SizedBox(key: Key('item-row-gap'), height: 8),
+          ],
+        ],
+      ),
+    ),
   );
 }
 
@@ -978,74 +1072,97 @@ class _ItemPreview extends StatelessWidget {
     final imageAttachmentIds =
         snapshot?.imageAttachmentIds.toList() ?? const [];
     final fileAttachmentIds = snapshot?.fileAttachmentIds.toList() ?? const [];
-    final preview = InkWell(
-      key: Key('item-preview-${item.id}'),
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => ItemDetailScreen(itemId: item.id),
+    final colorScheme = Theme.of(context).colorScheme;
+    const radius = BorderRadius.all(Radius.circular(10));
+    final preview = Material(
+      key: Key('item-surface-${item.id}'),
+      color: Color.alphaBlend(
+        colorScheme.surfaceContainerHighest.withValues(alpha: 0.28),
+        colorScheme.surface,
+      ),
+      shape: RoundedRectangleBorder(
+        borderRadius: radius,
+        side: BorderSide(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.55),
         ),
       ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (title != null && title.isNotEmpty) ...[
-                    Text(title, style: Theme.of(context).textTheme.titleMedium),
-                    const SizedBox(height: 5),
-                  ],
-                  if (item.content.trim().isNotEmpty)
-                    Text(
-                      item.content,
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                    )
-                  else if (fileAttachmentIds.isNotEmpty)
-                    _ItemFileSummary(
-                      itemId: item.id,
-                      attachmentIds: fileAttachmentIds,
-                    )
-                  else if (imageAttachmentIds.isNotEmpty)
-                    Text(
-                      imageAttachmentIds.length == 1
-                          ? 'Image'
-                          : '${imageAttachmentIds.length} images',
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        key: Key('item-preview-${item.id}'),
+        borderRadius: radius,
+        hoverColor: colorScheme.primary.withValues(alpha: 0.055),
+        splashColor: colorScheme.primary.withValues(alpha: 0.10),
+        highlightColor: colorScheme.primary.withValues(alpha: 0.075),
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => ItemDetailScreen(itemId: item.id),
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (title != null && title.isNotEmpty) ...[
+                      Text(
+                        title,
+                        style: Theme.of(context).textTheme.titleMedium,
                       ),
-                    ),
-                  if (item.content.trim().isNotEmpty &&
-                      fileAttachmentIds.isNotEmpty) ...[
-                    const SizedBox(height: 6),
-                    _ItemFileSummary(
-                      itemId: item.id,
-                      attachmentIds: fileAttachmentIds,
-                    ),
-                  ],
-                  if (item.tags.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      item.tags.map((tag) => '#$tag').join('  '),
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.primary,
+                      const SizedBox(height: 5),
+                    ],
+                    if (item.content.trim().isNotEmpty)
+                      Text(
+                        item.content,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                      )
+                    else if (fileAttachmentIds.isNotEmpty)
+                      _ItemFileSummary(
+                        itemId: item.id,
+                        attachmentIds: fileAttachmentIds,
+                      )
+                    else if (imageAttachmentIds.isNotEmpty)
+                      Text(
+                        imageAttachmentIds.length == 1
+                            ? 'Image'
+                            : '${imageAttachmentIds.length} images',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
                       ),
-                    ),
+                    if (item.content.trim().isNotEmpty &&
+                        fileAttachmentIds.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      _ItemFileSummary(
+                        itemId: item.id,
+                        attachmentIds: fileAttachmentIds,
+                      ),
+                    ],
+                    if (item.tags.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        item.tags.map((tag) => '#$tag').join('  '),
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
-            if (imageAttachmentIds.isNotEmpty) ...[
-              const SizedBox(width: 12),
-              _ItemImageThumbnail(
-                itemId: item.id,
-                attachmentIds: imageAttachmentIds,
-              ),
+              if (imageAttachmentIds.isNotEmpty) ...[
+                const SizedBox(width: 12),
+                _ItemImageThumbnail(
+                  itemId: item.id,
+                  attachmentIds: imageAttachmentIds,
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );

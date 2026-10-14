@@ -265,6 +265,11 @@ final desktopSidebarCollapsedProvider =
       DesktopSidebarController.new,
     );
 
+final desktopSidebarWidthProvider =
+    AsyncNotifierProvider<DesktopSidebarWidthController, double>(
+      DesktopSidebarWidthController.new,
+    );
+
 class DesktopSidebarController extends AsyncNotifier<bool> {
   @override
   Future<bool> build() => ref
@@ -276,6 +281,29 @@ class DesktopSidebarController extends AsyncNotifier<bool> {
     await ref
         .read(desktopShellPreferencesRepositoryProvider)
         .saveSidebarCollapsed(collapsed);
+  }
+}
+
+class DesktopSidebarWidthController extends AsyncNotifier<double> {
+  @override
+  Future<double> build() => ref
+      .watch(desktopShellPreferencesRepositoryProvider)
+      .loadSidebarExpandedWidth();
+
+  void previewWidth(double width) {
+    state = AsyncData(DesktopSidebarDimensions.clampExpandedWidth(width));
+  }
+
+  Future<void> persistWidth() async {
+    final width = state.value ?? DesktopSidebarDimensions.defaultExpandedWidth;
+    await ref
+        .read(desktopShellPreferencesRepositoryProvider)
+        .saveSidebarExpandedWidth(width);
+  }
+
+  Future<void> resetWidth() async {
+    previewWidth(DesktopSidebarDimensions.defaultExpandedWidth);
+    await persistWidth();
   }
 }
 

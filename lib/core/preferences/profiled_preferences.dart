@@ -5,6 +5,8 @@ abstract interface class PreferenceBackend {
   Future<void> setString(String key, String value);
   Future<bool?> getBool(String key);
   Future<void> setBool(String key, bool value);
+  Future<double?> getDouble(String key);
+  Future<void> setDouble(String key, double value);
 }
 
 class SharedPreferencesBackend implements PreferenceBackend {
@@ -28,6 +30,14 @@ class SharedPreferencesBackend implements PreferenceBackend {
   Future<void> setBool(String key, bool value) async {
     await _preferences.setBool(key, value);
   }
+
+  @override
+  Future<double?> getDouble(String key) => _preferences.getDouble(key);
+
+  @override
+  Future<void> setDouble(String key, double value) async {
+    await _preferences.setDouble(key, value);
+  }
 }
 
 class MemoryPreferenceBackend implements PreferenceBackend {
@@ -46,6 +56,14 @@ class MemoryPreferenceBackend implements PreferenceBackend {
 
   @override
   Future<void> setBool(String key, bool value) async {
+    values[key] = value;
+  }
+
+  @override
+  Future<double?> getDouble(String key) async => values[key] as double?;
+
+  @override
+  Future<void> setDouble(String key, double value) async {
     values[key] = value;
   }
 }
@@ -75,4 +93,10 @@ class ProfiledPreferences {
 
   Future<void> setBool(String key, bool value) =>
       _backend.setBool(namespacedKey(key), value);
+
+  Future<double?> getDouble(String key) =>
+      _backend.getDouble(namespacedKey(key));
+
+  Future<void> setDouble(String key, double value) =>
+      _backend.setDouble(namespacedKey(key), value);
 }
