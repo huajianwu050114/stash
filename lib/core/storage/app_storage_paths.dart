@@ -34,6 +34,38 @@ class AppStoragePaths {
   Directory get attachmentsDirectory =>
       Directory(path.join(root.path, 'attachments'));
 
+  /// Profile-aware maintenance data lives beside, never inside, the active
+  /// profile root so a pending restore can replace that root safely.
+  Directory get maintenanceDirectory =>
+      Directory(path.join(root.parent.path, 'maintenance'));
+  File get pendingRestoreFile => File(
+    path.join(
+      maintenanceDirectory.path,
+      'pending_restore_${profile.preferenceNamespace}.json',
+    ),
+  );
+  Directory get restoreStagingDirectory => Directory(
+    path.join(
+      maintenanceDirectory.path,
+      'restore_staging',
+      profile.preferenceNamespace,
+    ),
+  );
+  Directory get restoreRollbackDirectory => Directory(
+    path.join(
+      maintenanceDirectory.path,
+      'rollback',
+      profile.preferenceNamespace,
+    ),
+  );
+  Directory get backupStagingDirectory => Directory(
+    path.join(
+      maintenanceDirectory.path,
+      'backup_staging',
+      profile.preferenceNamespace,
+    ),
+  );
+
   Future<void> ensureCreated() async {
     await databaseDirectory.create(recursive: true);
     await attachmentsDirectory.create(recursive: true);
