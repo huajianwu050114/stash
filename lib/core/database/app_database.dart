@@ -19,6 +19,8 @@ part 'app_database.g.dart';
 /// database is never recreated or dropped on upgrade.
 @DriftDatabase(tables: [Items, Channels, Attachments, SyncOutbox, SyncMeta])
 class AppDatabase extends _$AppDatabase {
+  static const currentSchemaVersion = 3;
+
   /// Opens the real on-device database using the best native SQLite backend
   /// available on the current platform (see `package:drift_flutter`).
   AppDatabase.open({required AppStoragePaths storage})
@@ -36,7 +38,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.executor);
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => currentSchemaVersion;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
