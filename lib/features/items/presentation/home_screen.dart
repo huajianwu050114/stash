@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -107,7 +108,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           actions: [
             PopupMenuButton<ThemeMode>(
               key: const Key('appearance-menu'),
-              tooltip: 'Appearance',
+              tooltip: '外观',
               icon: const Icon(Icons.brightness_6_outlined),
               onSelected: (mode) =>
                   ref.read(appearanceProvider.notifier).setThemeMode(mode),
@@ -115,24 +116,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 PopupMenuItem(
                   key: Key('appearance-system'),
                   value: ThemeMode.system,
-                  child: Text('System appearance'),
+                  child: Text('跟随系统'),
                 ),
                 PopupMenuItem(
                   key: Key('appearance-light'),
                   value: ThemeMode.light,
-                  child: Text('Light'),
+                  child: Text('浅色'),
                 ),
                 PopupMenuItem(
                   key: Key('appearance-dark'),
                   value: ThemeMode.dark,
-                  child: Text('Dark'),
+                  child: Text('深色'),
                 ),
               ],
             ),
             if (!wide)
               IconButton(
                 key: const Key('settings-button'),
-                tooltip: 'Settings',
+                tooltip: '设置',
                 onPressed: () => _openSettings(context),
                 icon: const Icon(Icons.settings_outlined),
               ),
@@ -140,7 +141,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               key: const Key('new-item-button'),
               onPressed: () => _createItem(context, null),
               icon: const Icon(Icons.add_rounded, size: 19),
-              label: Text(wide ? 'New' : 'Add item'),
+              label: const Text('添加条目'),
             ),
             SizedBox(width: wide ? 12 : 16),
           ],
@@ -176,9 +177,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     else
                       _DesktopSidebarResizeHandle(
                         key: const Key('desktop-sidebar-resize-handle'),
-                        onDragUpdate: (delta) => ref
+                        width: expandedSidebarWidth,
+                        onWidthChanged: (width) => ref
                             .read(desktopSidebarWidthProvider.notifier)
-                            .previewWidth(expandedSidebarWidth + delta),
+                            .previewWidth(width),
                         onDragEnd: () => ref
                             .read(desktopSidebarWidthProvider.notifier)
                             .persistWidth(),
@@ -189,11 +191,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     Expanded(
                       child: switch (_selectedKind) {
                         _ViewKind.inbox => const _ItemsPane(
-                          title: 'Inbox',
+                          title: '收件箱',
                           kind: _ViewKind.inbox,
                         ),
                         _ViewKind.pinned => const _ItemsPane(
-                          title: 'Pinned',
+                          title: '置顶',
                           kind: _ViewKind.pinned,
                         ),
                         _ViewKind.channel => _ChannelPane(
@@ -227,12 +229,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 class _DesktopSidebarResizeHandle extends StatefulWidget {
   const _DesktopSidebarResizeHandle({
     super.key,
-    required this.onDragUpdate,
+    required this.width,
+    required this.onWidthChanged,
     required this.onDragEnd,
     required this.onReset,
   });
 
-  final ValueChanged<double> onDragUpdate;
+  final double width;
+  final ValueChanged<double> onWidthChanged;
   final VoidCallback onDragEnd;
   final VoidCallback onReset;
 
@@ -245,6 +249,8 @@ class _DesktopSidebarResizeHandleState
     extends State<_DesktopSidebarResizeHandle> {
   bool _hovered = false;
   bool _dragging = false;
+  double? _dragStartWidth;
+  double? _dragStartPointerX;
 
   void _finishDrag() {
     if (_dragging) setState(() => _dragging = false);
@@ -265,9 +271,20 @@ class _DesktopSidebarResizeHandleState
       onExit: (_) => setState(() => _hovered = false),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onHorizontalDragStart: (_) => setState(() => _dragging = true),
-        onHorizontalDragUpdate: (details) =>
-            widget.onDragUpdate(details.delta.dx),
+        dragStartBehavior: DragStartBehavior.down,
+        onHorizontalDragStart: (details) {
+          _dragStartWidth = widget.width;
+          _dragStartPointerX = details.globalPosition.dx;
+          setState(() => _dragging = true);
+        },
+        onHorizontalDragUpdate: (details) {
+          final startWidth = _dragStartWidth;
+          final startPointerX = _dragStartPointerX;
+          if (startWidth == null || startPointerX == null) return;
+          widget.onWidthChanged(
+            startWidth + details.globalPosition.dx - startPointerX,
+          );
+        },
         onHorizontalDragEnd: (_) => _finishDrag(),
         onHorizontalDragCancel: _finishDrag,
         onDoubleTap: widget.onReset,
@@ -327,18 +344,25 @@ class _RootPane extends ConsumerWidget {
             alignment: Alignment.centerRight,
             child: IconButton(
               key: const Key('collapse-sidebar'),
-              tooltip: 'Collapse sidebar',
+              tooltip: '收起侧栏',
               onPressed: onToggleCollapsed,
               icon: const Icon(Icons.chevron_left_rounded, size: 22),
             ),
           ),
+        Text(
+          '系统',
+          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 6),
         _ItemDropTarget(
           channelId: null,
           child: _LocationTile(
             key: const Key('open-inbox'),
             icon: Icons.inbox_outlined,
-            title: 'Inbox',
-            subtitle: 'Things you saved without filing',
+            title: '收件箱',
             selected: selectedKind == _ViewKind.inbox,
             onTap: () => onSpecial(_ViewKind.inbox),
           ),
@@ -346,8 +370,7 @@ class _RootPane extends ConsumerWidget {
         _LocationTile(
           key: const Key('open-pinned'),
           icon: Icons.push_pin_outlined,
-          title: 'Pinned',
-          subtitle: 'Important items from everywhere',
+          title: '置顶',
           selected: selectedKind == _ViewKind.pinned,
           onTap: () => onSpecial(_ViewKind.pinned),
         ),
@@ -356,7 +379,7 @@ class _RootPane extends ConsumerWidget {
           children: [
             Expanded(
               child: Text(
-                'Channels',
+                '频道',
                 style: Theme.of(context).textTheme.titleSmall?.copyWith(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                   fontWeight: FontWeight.w600,
@@ -366,7 +389,7 @@ class _RootPane extends ConsumerWidget {
             if (compact)
               IconButton(
                 key: const Key('new-root-channel'),
-                tooltip: 'New channel',
+                tooltip: '新建频道',
                 onPressed: () => _createChannel(context, ref, null),
                 icon: const Icon(Icons.create_new_folder_outlined, size: 19),
               )
@@ -375,7 +398,7 @@ class _RootPane extends ConsumerWidget {
                 key: const Key('new-root-channel'),
                 onPressed: () => _createChannel(context, ref, null),
                 icon: const Icon(Icons.create_new_folder_outlined, size: 18),
-                label: const Text('New channel'),
+                label: const Text('新建频道'),
               ),
           ],
         ),
@@ -393,13 +416,13 @@ class _RootPane extends ConsumerWidget {
                   padding: EdgeInsets.symmetric(vertical: 16),
                   child: Align(
                     alignment: Alignment.centerLeft,
-                    child: Text('No channels yet.'),
+                    child: Text('暂无频道'),
                   ),
                 ),
             ],
           ),
           loading: () => const LinearProgressIndicator(),
-          error: (_, _) => const Text('Channels could not be loaded.'),
+          error: (_, _) => const Text('频道加载失败'),
         ),
         if (compact) ...[
           const SizedBox(height: 16),
@@ -412,7 +435,7 @@ class _RootPane extends ConsumerWidget {
               borderRadius: BorderRadius.circular(8),
             ),
             leading: const Icon(Icons.settings_outlined, size: 20),
-            title: const Text('Settings'),
+            title: const Text('设置'),
             onTap: onSettings,
           ),
         ],
@@ -421,7 +444,7 @@ class _RootPane extends ConsumerWidget {
           inbox.when(
             data: (items) => _RootInboxSections(items: items),
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (_, _) => const Text('Inbox could not be loaded.'),
+            error: (_, _) => const Text('收件箱加载失败'),
           ),
         ],
       ],
@@ -454,7 +477,7 @@ class _CollapsedRootPane extends StatelessWidget {
       const SizedBox(height: 4),
       IconButton(
         key: const Key('expand-sidebar'),
-        tooltip: 'Expand sidebar',
+        tooltip: '展开侧栏',
         onPressed: onExpand,
         icon: const Icon(Icons.chevron_right_rounded, size: 22),
       ),
@@ -469,7 +492,7 @@ class _CollapsedRootPane extends StatelessWidget {
               child: _SidebarIconButton(
                 key: const Key('open-inbox'),
                 icon: Icons.inbox_outlined,
-                tooltip: 'Inbox',
+                tooltip: '收件箱',
                 selected: selectedKind == _ViewKind.inbox,
                 onTap: () => onSpecial(_ViewKind.inbox),
               ),
@@ -477,7 +500,7 @@ class _CollapsedRootPane extends StatelessWidget {
             _SidebarIconButton(
               key: const Key('open-pinned'),
               icon: Icons.push_pin_outlined,
-              tooltip: 'Pinned',
+              tooltip: '置顶',
               selected: selectedKind == _ViewKind.pinned,
               onTap: () => onSpecial(_ViewKind.pinned),
             ),
@@ -507,7 +530,7 @@ class _CollapsedRootPane extends StatelessWidget {
               ],
               error: (_, _) => const [
                 Tooltip(
-                  message: 'Channels could not be loaded',
+                  message: '频道加载失败',
                   child: Icon(Icons.error_outline, size: 20),
                 ),
               ],
@@ -519,7 +542,7 @@ class _CollapsedRootPane extends StatelessWidget {
       _SidebarIconButton(
         key: const Key('sidebar-settings'),
         icon: Icons.settings_outlined,
-        tooltip: 'Settings',
+        tooltip: '设置',
         selected: false,
         onTap: onSettings,
       ),
@@ -578,13 +601,7 @@ class _RootInboxSections extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (items.isEmpty) {
-      return _EmptyItems(
-        key: const Key('empty-home'),
-        title: 'Nothing stashed yet',
-        body: 'Save it now. You can organize it later.',
-        actionLabel: 'Add your first item',
-        onAdd: () => _createItem(context, null),
-      );
+      return const _EmptyItems(key: Key('empty-home'), title: '暂无条目');
     }
     final pinned = items.where((item) => item.isPinned).toList();
     final recent = items.where((item) => !item.isPinned).toList();
@@ -594,14 +611,14 @@ class _RootInboxSections extends StatelessWidget {
         if (pinned.isNotEmpty)
           _ItemSection(
             key: const Key('pinned-section'),
-            title: 'Pinned',
+            title: '置顶',
             items: pinned,
           ),
         if (pinned.isNotEmpty && recent.isNotEmpty) const SizedBox(height: 28),
         if (recent.isNotEmpty)
           _ItemSection(
             key: const Key('recent-section'),
-            title: 'Recent in Inbox',
+            title: '收件箱',
             items: recent,
           ),
       ],
@@ -615,11 +632,8 @@ class _ItemsLocationScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: Text(kind == _ViewKind.inbox ? 'Inbox' : 'Pinned')),
-    body: _ItemsPane(
-      title: kind == _ViewKind.inbox ? 'Inbox' : 'Pinned',
-      kind: kind,
-    ),
+    appBar: AppBar(title: Text(kind == _ViewKind.inbox ? '收件箱' : '置顶')),
+    body: _ItemsPane(title: kind == _ViewKind.inbox ? '收件箱' : '置顶', kind: kind),
   );
 }
 
@@ -641,28 +655,16 @@ class _ItemsPane extends ConsumerWidget {
                 key: const Key('add-inbox-item'),
                 onPressed: () => _createItem(context, null),
                 icon: const Icon(Icons.add_rounded),
-                label: const Text('Add item'),
+                label: const Text('添加条目'),
               ),
             ]
           : const [],
       child: items.when(
         data: (values) => values.isEmpty
-            ? _EmptyItems(
-                title: kind == _ViewKind.pinned
-                    ? 'Nothing pinned yet'
-                    : 'Inbox is empty',
-                body: kind == _ViewKind.pinned
-                    ? 'Pinned items from every channel appear here.'
-                    : 'Save something now and organize it later.',
-                actionLabel: kind == _ViewKind.inbox ? 'Add item' : null,
-                onAdd: kind == _ViewKind.inbox
-                    ? () => _createItem(context, null)
-                    : null,
-              )
-            : _ItemSection(title: 'Items', items: values),
+            ? _EmptyItems(title: kind == _ViewKind.pinned ? '暂无置顶' : '暂无条目')
+            : _ItemSection(title: '条目', items: values),
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (_, _) =>
-            const Center(child: Text('Items could not be loaded.')),
+        error: (_, _) => const Center(child: Text('条目加载失败')),
       ),
     );
   }
@@ -706,9 +708,7 @@ class _ChannelPane extends ConsumerWidget {
     return channel.when(
       data: (value) {
         if (value == null || value.isDeleted) {
-          return const Center(
-            child: Text('This channel is no longer available.'),
-          );
+          return const Center(child: Text('频道不可用'));
         }
         return _ContentFrame(
           title: value.name,
@@ -726,32 +726,32 @@ class _ChannelPane extends ConsumerWidget {
                   }
                 },
                 icon: const Icon(Icons.arrow_upward_rounded),
-                label: const Text('Up'),
+                label: const Text('上一级'),
               ),
             FilledButton.icon(
               key: const Key('add-channel-item'),
               onPressed: () => _createItem(context, channelId),
               icon: const Icon(Icons.add_rounded),
-              label: const Text('Add item'),
+              label: const Text('添加条目'),
             ),
             OutlinedButton.icon(
               key: const Key('new-subchannel'),
               onPressed: () => _createChannel(context, ref, channelId),
               icon: const Icon(Icons.create_new_folder_outlined),
-              label: const Text('New subchannel'),
+              label: const Text('新建子频道'),
             ),
             PopupMenuButton<String>(
               key: const Key('channel-menu'),
-              tooltip: 'Channel actions',
+              tooltip: '频道操作',
               onSelected: (action) =>
                   _manageChannel(context, ref, value, action, onDeleted),
               itemBuilder: (_) => const [
-                PopupMenuItem(value: 'rename', child: Text('Rename')),
-                PopupMenuItem(value: 'move', child: Text('Move')),
+                PopupMenuItem(value: 'rename', child: Text('重命名')),
+                PopupMenuItem(value: 'move', child: Text('移动')),
                 PopupMenuItem(
                   key: Key('delete-channel-action'),
                   value: 'delete',
-                  child: Text('Delete'),
+                  child: Text('删除'),
                 ),
               ],
             ),
@@ -764,32 +764,26 @@ class _ChannelPane extends ConsumerWidget {
                     ? const SizedBox.shrink()
                     : _ChannelSection(channels: values, onOpen: onOpenChannel),
                 loading: () => const LinearProgressIndicator(),
-                error: (_, _) => const Text('Subchannels could not be loaded.'),
+                error: (_, _) => const Text('子频道加载失败'),
               ),
               items.when(
                 data: (values) => values.isEmpty
                     ? (children.value?.isEmpty ?? true)
-                          ? _EmptyItems(
-                              title: 'This channel is empty',
-                              body: 'Add an item or create a subchannel.',
-                              actionLabel: 'Add item',
-                              onAdd: () => _createItem(context, channelId),
-                            )
+                          ? const _EmptyItems(title: '暂无内容')
                           : const SizedBox(height: 24)
                     : Padding(
                         padding: const EdgeInsets.only(top: 20),
-                        child: _ItemSection(title: 'Items', items: values),
+                        child: _ItemSection(title: '条目', items: values),
                       ),
                 loading: () => const Center(child: CircularProgressIndicator()),
-                error: (_, _) => const Text('Items could not be loaded.'),
+                error: (_, _) => const Text('条目加载失败'),
               ),
             ],
           ),
         );
       },
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (_, _) =>
-          const Center(child: Text('Channel could not be loaded.')),
+      error: (_, _) => const Center(child: Text('频道加载失败')),
     );
   }
 }
@@ -884,7 +878,7 @@ class _ChannelSection extends StatelessWidget {
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      Text('Channels', style: Theme.of(context).textTheme.titleSmall),
+      Text('频道', style: Theme.of(context).textTheme.titleSmall),
       const SizedBox(height: 6),
       for (final channel in channels)
         Padding(
@@ -904,24 +898,22 @@ class _LocationTile extends StatelessWidget {
     super.key,
     required this.icon,
     required this.title,
-    required this.subtitle,
     required this.selected,
     required this.onTap,
   });
   final IconData icon;
   final String title;
-  final String subtitle;
   final bool selected;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) => ListTile(
+    dense: true,
     selected: selected,
     selectedTileColor: Theme.of(context).colorScheme.secondaryContainer,
     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
     leading: Icon(icon),
     title: Text(title),
-    subtitle: Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis),
     trailing: const Icon(Icons.chevron_right_rounded),
     onTap: onTap,
   );
@@ -979,43 +971,15 @@ class _ItemDropTarget extends ConsumerWidget {
 }
 
 class _EmptyItems extends StatelessWidget {
-  const _EmptyItems({
-    super.key,
-    required this.title,
-    required this.body,
-    this.actionLabel,
-    this.onAdd,
-  });
+  const _EmptyItems({super.key, required this.title});
   final String title;
-  final String body;
-  final String? actionLabel;
-  final VoidCallback? onAdd;
 
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 24),
     child: Column(
       mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(title, style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: 8),
-        Text(
-          body,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
-        ),
-        if (actionLabel != null && onAdd != null) ...[
-          const SizedBox(height: 16),
-          FilledButton.icon(
-            key: const Key('empty-add-item'),
-            onPressed: onAdd,
-            icon: const Icon(Icons.add_rounded),
-            label: Text(actionLabel!),
-          ),
-        ],
-      ],
+      children: [Text(title, style: Theme.of(context).textTheme.titleLarge)],
     ),
   );
 }
@@ -1075,10 +1039,7 @@ class _ItemPreview extends StatelessWidget {
     const radius = BorderRadius.all(Radius.circular(10));
     final preview = Material(
       key: Key('item-surface-${item.id}'),
-      color: Color.alphaBlend(
-        colorScheme.surfaceContainerHighest.withValues(alpha: 0.28),
-        colorScheme.surface,
-      ),
+      color: colorScheme.surfaceContainerLow,
       shape: RoundedRectangleBorder(
         borderRadius: radius,
         side: BorderSide(
@@ -1329,7 +1290,7 @@ Future<void> _createChannel(
   WidgetRef ref,
   String? parentId,
 ) async {
-  final name = await _nameDialog(context, title: 'New channel');
+  final name = await _nameDialog(context, title: '新建频道');
   if (name == null || !context.mounted) return;
   try {
     if (parentId == null) {
@@ -1355,7 +1316,7 @@ Future<void> _manageChannel(
     if (action == 'rename') {
       final name = await _nameDialog(
         context,
-        title: 'Rename channel',
+        title: '重命名频道',
         initialValue: channel.name,
       );
       if (name != null) {
@@ -1380,17 +1341,17 @@ Future<void> _manageChannel(
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          title: const Text('Delete this channel?'),
-          content: const Text('Only an empty channel can be deleted.'),
+          title: const Text('删除此频道？'),
+          content: const Text('仅可删除空频道。'),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('Cancel'),
+              child: const Text('取消'),
             ),
             TextButton(
               key: const Key('confirm-delete-channel'),
               onPressed: () => Navigator.pop(dialogContext, true),
-              child: const Text('Delete'),
+              child: const Text('删除'),
             ),
           ],
         ),
@@ -1419,7 +1380,7 @@ Future<String?> _nameDialog(
         key: const Key('channel-name-field'),
         controller: controller,
         autofocus: true,
-        decoration: const InputDecoration(labelText: 'Name'),
+        decoration: const InputDecoration(labelText: '名称'),
         onSubmitted: (value) {
           if (value.trim().isNotEmpty) Navigator.pop(dialogContext, value);
         },
@@ -1427,7 +1388,7 @@ Future<String?> _nameDialog(
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(dialogContext),
-          child: const Text('Cancel'),
+          child: const Text('取消'),
         ),
         FilledButton(
           key: const Key('save-channel'),
@@ -1436,7 +1397,7 @@ Future<String?> _nameDialog(
               Navigator.pop(dialogContext, controller.text);
             }
           },
-          child: const Text('Save'),
+          child: const Text('保存'),
         ),
       ],
     ),
