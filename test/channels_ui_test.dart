@@ -60,7 +60,9 @@ void main() {
     (tester) async {
       await pumpApp(tester, size: const Size(430, 800));
       expect(find.byKey(const Key('new-item-button')), findsOneWidget);
-      expect(find.byKey(const Key('empty-add-item')), findsOneWidget);
+      expect(find.byKey(const Key('empty-add-item')), findsNothing);
+      expect(find.text('暂无频道'), findsOneWidget);
+      expect(find.text('暂无条目'), findsOneWidget);
 
       await tester.tap(find.byKey(const Key('new-root-channel')));
       await pumpUi(tester);
@@ -233,12 +235,57 @@ void main() {
     await pumpApp(tester, size: const Size(1200, 800));
     expect(find.byKey(const Key('wide-browser')), findsOneWidget);
     expect(find.byKey(const Key('new-item-button')), findsOneWidget);
-    expect(find.text('Inbox'), findsWidgets);
+    expect(find.text('收件箱'), findsWidgets);
 
     await tester.tap(find.byKey(Key('channel-${channel.id}')));
     await pumpUi(tester);
     expect(find.byKey(const Key('add-channel-item')), findsOneWidget);
     expect(find.byKey(const Key('new-subchannel')), findsOneWidget);
+    await disposeApp(tester);
+  });
+
+  testWidgets('sidebar uses concise Chinese navigation and empty states', (
+    tester,
+  ) async {
+    await pumpApp(tester, size: const Size(1200, 800));
+
+    expect(find.text('系统'), findsOneWidget);
+    expect(find.text('收件箱'), findsWidgets);
+    expect(find.text('置顶'), findsOneWidget);
+    expect(find.text('频道'), findsOneWidget);
+    expect(find.text('设置'), findsOneWidget);
+    expect(find.text('Things you saved without filing'), findsNothing);
+    expect(find.text('Important items from everywhere'), findsNothing);
+
+    await tester.tap(find.byKey(const Key('open-pinned')));
+    await pumpUi(tester);
+    expect(find.text('暂无置顶'), findsOneWidget);
+    expect(
+      find.text('Pinned items from every channel appear here.'),
+      findsNothing,
+    );
+    await disposeApp(tester);
+  });
+
+  testWidgets('empty channel keeps header actions without duplicate copy', (
+    tester,
+  ) async {
+    final channel = await channels.createRootChannel(
+      id: 'empty-channel',
+      name: '空白频道',
+    );
+    await pumpApp(tester, size: const Size(1200, 800));
+
+    await tester.tap(find.byKey(Key('channel-${channel.id}')));
+    await pumpUi(tester);
+
+    expect(find.text('暂无内容'), findsOneWidget);
+    expect(find.text('Add an item or create a subchannel.'), findsNothing);
+    expect(find.byKey(const Key('empty-add-item')), findsNothing);
+    expect(find.byKey(const Key('add-channel-item')), findsOneWidget);
+    expect(find.text('添加条目'), findsWidgets);
+    expect(find.byKey(const Key('new-subchannel')), findsOneWidget);
+    expect(find.text('新建子频道'), findsOneWidget);
     await disposeApp(tester);
   });
 
@@ -305,7 +352,7 @@ void main() {
       final resizedWidth = tester
           .getSize(find.byKey(const Key('desktop-sidebar')))
           .width;
-      expect(resizedWidth, greaterThan(216));
+      expect(resizedWidth, closeTo(316, 1));
       expect(
         await preferences.getDouble(
           DesktopShellPreferencesRepository.sidebarExpandedWidthKey,
@@ -357,6 +404,46 @@ void main() {
       await disposeApp(tester);
     },
   );
+
+  testWidgets('absolute sidebar drag is independent of update count', (
+    tester,
+  ) async {
+    final preferences = _MemoryDesktopShellPreferences();
+    await pumpApp(
+      tester,
+      size: const Size(1200, 800),
+      shellPreferences: preferences,
+    );
+
+    Future<double> dragSidebar(List<double> movements) async {
+      final handle = find.byKey(const Key('desktop-sidebar-resize-handle'));
+      final gesture = await tester.startGesture(tester.getCenter(handle));
+      for (final movement in movements) {
+        await gesture.moveBy(Offset(movement, 0));
+        await tester.pump();
+      }
+      await gesture.up();
+      await pumpUi(tester);
+      return tester.getSize(find.byKey(const Key('desktop-sidebar'))).width;
+    }
+
+    final singleUpdateWidth = await dragSidebar(const [50]);
+    expect(singleUpdateWidth, closeTo(266, 1));
+
+    await tester.tap(find.byKey(const Key('desktop-sidebar-resize-handle')));
+    await tester.pump(const Duration(milliseconds: 40));
+    await tester.tap(find.byKey(const Key('desktop-sidebar-resize-handle')));
+    await pumpUi(tester);
+    expect(
+      tester.getSize(find.byKey(const Key('desktop-sidebar'))).width,
+      DesktopSidebarDimensions.defaultExpandedWidth,
+    );
+
+    final severalUpdatesWidth = await dragSidebar(const [20, 10, 10, 10]);
+    expect(severalUpdatesWidth, closeTo(266, 1));
+    expect(severalUpdatesWidth, closeTo(singleUpdateWidth, 0.1));
+    await disposeApp(tester);
+  });
 
   testWidgets('desktop sidebar clamps at the responsive threshold', (
     tester,

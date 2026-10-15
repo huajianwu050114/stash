@@ -26,7 +26,7 @@ void main() {
 
     expect(find.text('Stash'), findsOneWidget);
     expect(find.byKey(const Key('empty-home')), findsOneWidget);
-    expect(find.text('Nothing stashed yet'), findsOneWidget);
+    expect(find.text('暂无条目'), findsOneWidget);
     expect(find.byKey(const Key('new-item-button')), findsOneWidget);
 
     // Unmount the tree inside the test body, fire drift's zero-duration
