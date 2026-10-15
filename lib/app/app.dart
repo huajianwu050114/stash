@@ -41,8 +41,8 @@ class _StashAppState extends ConsumerState<StashApp> {
       title: profile.displayName,
       debugShowCheckedModeBanner: false,
       themeMode: themeMode,
-      theme: _theme(Brightness.light),
-      darkTheme: _theme(Brightness.dark),
+      theme: createStashTheme(Brightness.light),
+      darkTheme: createStashTheme(Brightness.dark),
       localizationsDelegates: const [
         FlutterQuillLocalizations.delegate,
         ...GlobalMaterialLocalizations.delegates,
@@ -103,14 +103,51 @@ class _StashSurfaceHostState extends State<StashSurfaceHost> {
   );
 }
 
-ThemeData _theme(Brightness brightness) {
+ThemeData createStashTheme(Brightness brightness) {
   const seed = Color(0xFF527660);
   final dark = brightness == Brightness.dark;
-  final scheme = ColorScheme.fromSeed(
+  final generated = ColorScheme.fromSeed(
     seedColor: seed,
     brightness: brightness,
     surface: dark ? const Color(0xFF151815) : const Color(0xFFFAFBF8),
   );
+  final scheme = dark
+      ? generated.copyWith(
+          primary: const Color(0xFF86B394),
+          onPrimary: const Color(0xFF12351F),
+          primaryContainer: const Color(0xFF294A35),
+          onPrimaryContainer: const Color(0xFFD0E8D6),
+          secondary: const Color(0xFFB9C2BB),
+          onSecondary: const Color(0xFF253029),
+          secondaryContainer: const Color(0xFF2B3730),
+          onSecondaryContainer: const Color(0xFFDCE8DF),
+          tertiary: const Color(0xFFBFC3C7),
+          tertiaryContainer: const Color(0xFF303438),
+          surface: const Color(0xFF151617),
+          surfaceDim: const Color(0xFF111213),
+          surfaceBright: const Color(0xFF35373A),
+          surfaceContainerLowest: const Color(0xFF101112),
+          surfaceContainerLow: const Color(0xFF1B1C1E),
+          surfaceContainer: const Color(0xFF202225),
+          surfaceContainerHigh: const Color(0xFF27292C),
+          surfaceContainerHighest: const Color(0xFF303236),
+          outline: const Color(0xFF8A8D91),
+          outlineVariant: const Color(0xFF45484C),
+        )
+      : generated.copyWith(
+          surface: const Color(0xFFFAFBF8),
+          surfaceDim: const Color(0xFFDADCD8),
+          surfaceBright: const Color(0xFFFAFBF8),
+          surfaceContainerLowest: const Color(0xFFFFFFFF),
+          surfaceContainerLow: const Color(0xFFF5F6F3),
+          surfaceContainer: const Color(0xFFEFF1ED),
+          surfaceContainerHigh: const Color(0xFFE9EBE7),
+          surfaceContainerHighest: const Color(0xFFE3E5E1),
+          outline: const Color(0xFF747974),
+          outlineVariant: const Color(0xFFC4C8C3),
+          secondaryContainer: const Color(0xFFDCE9DF),
+          onSecondaryContainer: const Color(0xFF22382A),
+        );
   return ThemeData(
     useMaterial3: true,
     visualDensity: const VisualDensity(horizontal: -1, vertical: -1),
@@ -118,7 +155,7 @@ ThemeData _theme(Brightness brightness) {
     colorScheme: scheme,
     scaffoldBackgroundColor: scheme.surface,
     canvasColor: scheme.surface,
-    dividerColor: dark ? const Color(0xFF343934) : const Color(0xFFE2E7E1),
+    dividerColor: scheme.outlineVariant,
     appBarTheme: AppBarTheme(
       backgroundColor: scheme.surface,
       foregroundColor: scheme.onSurface,
@@ -131,8 +168,6 @@ ThemeData _theme(Brightness brightness) {
       filled: false,
       labelStyle: TextStyle(color: scheme.onSurfaceVariant),
     ),
-    dividerTheme: DividerThemeData(
-      color: dark ? const Color(0xFF343934) : const Color(0xFFE2E7E1),
-    ),
+    dividerTheme: DividerThemeData(color: scheme.outlineVariant),
   );
 }
