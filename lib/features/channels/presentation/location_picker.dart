@@ -36,7 +36,7 @@ Future<LocationSelection?> showLocationPicker(
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 4, 24, 12),
               child: Text(
-                'Choose location',
+                '选择位置',
                 style: Theme.of(context).textTheme.titleLarge,
               ),
             ),
@@ -49,7 +49,7 @@ Future<LocationSelection?> showLocationPicker(
                     ListTile(
                       key: const Key('location-inbox'),
                       leading: const Icon(Icons.inbox_outlined),
-                      title: const Text('Inbox'),
+                      title: const Text('收件箱'),
                       trailing: currentChannelId == null
                           ? const Icon(Icons.check_rounded)
                           : null,
@@ -62,7 +62,7 @@ Future<LocationSelection?> showLocationPicker(
                     ListTile(
                       key: const Key('location-root'),
                       leading: const Icon(Icons.account_tree_outlined),
-                      title: const Text('Root'),
+                      title: const Text('根频道'),
                       trailing: currentChannelId == null
                           ? const Icon(Icons.check_rounded)
                           : null,

@@ -8,17 +8,23 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/desktop_shell_preferences.dart';
 import '../../../app/providers.dart';
 import '../../../app/dev_profile_badge.dart';
+import '../../../app/stash_menu.dart';
 import '../../attachments/data/attachment_repository.dart';
 import '../../channels/domain/channel.dart';
-import '../../channels/presentation/location_picker.dart';
+import '../../channels/presentation/channel_actions.dart';
 import '../data/item_document_codec.dart';
 import '../domain/item.dart';
 import '../../quick_stash/presentation/quick_stash_settings_screen.dart';
 import 'item_detail_screen.dart';
+import 'item_actions.dart';
 import 'item_drag_drop.dart';
 import 'item_editor_screen.dart';
 
 enum _ViewKind { inbox, pinned, channel }
+
+enum _NewAction { item, channel }
+
+enum _ItemMenuAction { open, togglePin, move, delete }
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -96,37 +102,35 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               children: [
                 Text(
                   'Stash',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.3,
-                  ),
+                  style: Theme.of(context).textTheme.titleLarge
+                      ?.copyWith(fontWeight: FontWeight.w600),
                 ),
                 const DevProfileBadge(),
               ],
             ),
           ),
           actions: [
-            PopupMenuButton<ThemeMode>(
+            StashMenuButton<ThemeMode>(
               key: const Key('appearance-menu'),
               tooltip: '外观',
-              icon: const Icon(Icons.brightness_6_outlined),
+              icon: Icons.brightness_6_outlined,
               onSelected: (mode) =>
                   ref.read(appearanceProvider.notifier).setThemeMode(mode),
-              itemBuilder: (_) => const [
-                PopupMenuItem(
+              actions: const [
+                StashMenuAction(
                   key: Key('appearance-system'),
                   value: ThemeMode.system,
-                  child: Text('跟随系统'),
+                  label: '跟随系统',
                 ),
-                PopupMenuItem(
+                StashMenuAction(
                   key: Key('appearance-light'),
                   value: ThemeMode.light,
-                  child: Text('浅色'),
+                  label: '浅色',
                 ),
-                PopupMenuItem(
+                StashMenuAction(
                   key: Key('appearance-dark'),
                   value: ThemeMode.dark,
-                  child: Text('深色'),
+                  label: '深色',
                 ),
               ],
             ),
@@ -137,11 +141,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 onPressed: () => _openSettings(context),
                 icon: const Icon(Icons.settings_outlined),
               ),
-            FilledButton.tonalIcon(
-              key: const Key('new-item-button'),
-              onPressed: () => _createItem(context, null),
-              icon: const Icon(Icons.add_rounded, size: 19),
-              label: const Text('添加条目'),
+            StashMenuButton<_NewAction>(
+              key: const Key('global-new-button'),
+              tooltip: '新建',
+              icon: Icons.add_rounded,
+              label: '新建',
+              actions: _newMenuActions(_selectedKind == _ViewKind.channel),
+              onSelected: (action) => _performNewAction(
+                context,
+                ref,
+                action,
+                channelId: _selectedKind == _ViewKind.channel
+                    ? _selectedChannelId
+                    : null,
+              ),
             ),
             SizedBox(width: wide ? 12 : 16),
           ],
@@ -351,10 +364,8 @@ class _RootPane extends ConsumerWidget {
           ),
         Text(
           '系统',
-          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-            fontWeight: FontWeight.w600,
-          ),
+          style: Theme.of(context).textTheme.titleSmall
+              ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
         ),
         const SizedBox(height: 6),
         _ItemDropTarget(
@@ -382,7 +393,6 @@ class _RootPane extends ConsumerWidget {
                 '频道',
                 style: Theme.of(context).textTheme.titleSmall?.copyWith(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  fontWeight: FontWeight.w600,
                 ),
               ),
             ),
@@ -390,13 +400,21 @@ class _RootPane extends ConsumerWidget {
               IconButton(
                 key: const Key('new-root-channel'),
                 tooltip: '新建频道',
-                onPressed: () => _createChannel(context, ref, null),
+                onPressed: () => ChannelActionController.create(
+                  context,
+                  ref,
+                  parentId: null,
+                ),
                 icon: const Icon(Icons.create_new_folder_outlined, size: 19),
               )
             else
               TextButton.icon(
                 key: const Key('new-root-channel'),
-                onPressed: () => _createChannel(context, ref, null),
+                onPressed: () => ChannelActionController.create(
+                  context,
+                  ref,
+                  parentId: null,
+                ),
                 icon: const Icon(Icons.create_new_folder_outlined, size: 18),
                 label: const Text('新建频道'),
               ),
@@ -410,6 +428,9 @@ class _RootPane extends ConsumerWidget {
                   channel: channel,
                   selected: channel.id == selectedChannelId,
                   onTap: () => onChannel(channel),
+                  onDeleted: channel.id == selectedChannelId
+                      ? () => onSpecial(_ViewKind.inbox)
+                      : null,
                 ),
               if (values.isEmpty)
                 const Padding(
@@ -511,14 +532,21 @@ class _CollapsedRootPane extends StatelessWidget {
             ...channels.when(
               data: (values) => [
                 for (final channel in values)
-                  _ItemDropTarget(
-                    channelId: channel.id,
-                    child: _SidebarIconButton(
-                      key: Key('channel-${channel.id}'),
-                      icon: Icons.folder_outlined,
-                      tooltip: channel.name,
-                      selected: selectedChannelId == channel.id,
-                      onTap: () => onChannel(channel),
+                  _ChannelContextMenuRegion(
+                    channel: channel,
+                    onOpen: () => onChannel(channel),
+                    onDeleted: channel.id == selectedChannelId
+                        ? () => onSpecial(_ViewKind.inbox)
+                        : null,
+                    child: _ItemDropTarget(
+                      channelId: channel.id,
+                      child: _SidebarIconButton(
+                        key: Key('channel-${channel.id}'),
+                        icon: Icons.folder_outlined,
+                        tooltip: channel.name,
+                        selected: selectedChannelId == channel.id,
+                        onTap: () => onChannel(channel),
+                      ),
                     ),
                   ),
               ],
@@ -626,13 +654,27 @@ class _RootInboxSections extends StatelessWidget {
   }
 }
 
-class _ItemsLocationScreen extends StatelessWidget {
+class _ItemsLocationScreen extends ConsumerWidget {
   const _ItemsLocationScreen({required this.kind});
   final _ViewKind kind;
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: Text(kind == _ViewKind.inbox ? '收件箱' : '置顶')),
+  Widget build(BuildContext context, WidgetRef ref) => Scaffold(
+    appBar: AppBar(
+      title: Text(kind == _ViewKind.inbox ? '收件箱' : '置顶'),
+      actions: [
+        StashMenuButton<_NewAction>(
+          key: const Key('global-new-button'),
+          tooltip: '新建',
+          icon: Icons.add_rounded,
+          label: '新建',
+          actions: _newMenuActions(false),
+          onSelected: (action) =>
+              _performNewAction(context, ref, action, channelId: null),
+        ),
+        const SizedBox(width: 12),
+      ],
+    ),
     body: _ItemsPane(title: kind == _ViewKind.inbox ? '收件箱' : '置顶', kind: kind),
   );
 }
@@ -649,16 +691,7 @@ class _ItemsPane extends ConsumerWidget {
         : ref.watch(inboxItemsProvider);
     return _ContentFrame(
       title: title,
-      actions: kind == _ViewKind.inbox
-          ? [
-              FilledButton.icon(
-                key: const Key('add-inbox-item'),
-                onPressed: () => _createItem(context, null),
-                icon: const Icon(Icons.add_rounded),
-                label: const Text('添加条目'),
-              ),
-            ]
-          : const [],
+      actions: const [],
       child: items.when(
         data: (values) => values.isEmpty
             ? _EmptyItems(title: kind == _ViewKind.pinned ? '暂无置顶' : '暂无条目')
@@ -670,13 +703,26 @@ class _ItemsPane extends ConsumerWidget {
   }
 }
 
-class ChannelScreen extends StatelessWidget {
+class ChannelScreen extends ConsumerWidget {
   const ChannelScreen({super.key, required this.channelId});
   final String channelId;
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(),
+  Widget build(BuildContext context, WidgetRef ref) => Scaffold(
+    appBar: AppBar(
+      actions: [
+        StashMenuButton<_NewAction>(
+          key: const Key('global-new-button'),
+          tooltip: '新建',
+          icon: Icons.add_rounded,
+          label: '新建',
+          actions: _newMenuActions(true),
+          onSelected: (action) =>
+              _performNewAction(context, ref, action, channelId: channelId),
+        ),
+        const SizedBox(width: 12),
+      ],
+    ),
     body: _ChannelPane(
       channelId: channelId,
       onOpenChannel: (channel) => Navigator.of(context).push(
@@ -712,73 +758,60 @@ class _ChannelPane extends ConsumerWidget {
         }
         return _ContentFrame(
           title: value.name,
-          breadcrumbs: _Breadcrumbs(channelId: channelId),
+          breadcrumbs: _Breadcrumbs(
+            channelId: channelId,
+            onOpenChannel: onOpenChannel,
+          ),
           actions: [
-            if (value.parentId != null)
-              OutlinedButton.icon(
-                key: const Key('channel-up'),
-                onPressed: () async {
-                  final parent = await ref
-                      .read(channelRepositoryProvider)
-                      .getChannelById(value.parentId!);
-                  if (parent != null && !parent.isDeleted) {
-                    onOpenChannel(parent);
-                  }
-                },
-                icon: const Icon(Icons.arrow_upward_rounded),
-                label: const Text('上一级'),
-              ),
-            FilledButton.icon(
-              key: const Key('add-channel-item'),
-              onPressed: () => _createItem(context, channelId),
-              icon: const Icon(Icons.add_rounded),
-              label: const Text('添加条目'),
-            ),
-            OutlinedButton.icon(
-              key: const Key('new-subchannel'),
-              onPressed: () => _createChannel(context, ref, channelId),
-              icon: const Icon(Icons.create_new_folder_outlined),
-              label: const Text('新建子频道'),
-            ),
-            PopupMenuButton<String>(
+            StashMenuButton<ChannelAction>(
               key: const Key('channel-menu'),
               tooltip: '频道操作',
-              onSelected: (action) =>
-                  _manageChannel(context, ref, value, action, onDeleted),
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 'rename', child: Text('重命名')),
-                PopupMenuItem(value: 'move', child: Text('移动')),
-                PopupMenuItem(
-                  key: Key('delete-channel-action'),
-                  value: 'delete',
-                  child: Text('删除'),
+              icon: Icons.more_horiz_rounded,
+              actions: _channelManagementMenuActions,
+              onSelected: (action) => ChannelActionController.perform(
+                context,
+                ref,
+                channel: value,
+                action: action,
+                onDeleted: onDeleted,
+              ),
+            ),
+          ],
+          child: GestureDetector(
+            key: const Key('channel-content-area'),
+            behavior: HitTestBehavior.translucent,
+            onSecondaryTapDown: (details) => _showChannelCreateMenu(
+              context,
+              ref,
+              details.globalPosition,
+              channelId,
+            ),
+            child: ListView(
+              padding: EdgeInsets.zero,
+              children: [
+                children.when(
+                  data: (values) => values.isEmpty
+                      ? const SizedBox.shrink()
+                      : _ChannelSection(
+                          channels: values,
+                          onOpen: onOpenChannel,
+                        ),
+                  loading: () => const LinearProgressIndicator(),
+                  error: (_, _) => const Text('子频道加载失败'),
+                ),
+                items.when(
+                  data: (values) => values.isEmpty
+                      ? const SizedBox.shrink()
+                      : Padding(
+                          padding: const EdgeInsets.only(top: 20),
+                          child: _ItemSection(title: '条目', items: values),
+                        ),
+                  loading: () =>
+                      const Center(child: CircularProgressIndicator()),
+                  error: (_, _) => const Text('条目加载失败'),
                 ),
               ],
             ),
-          ],
-          child: ListView(
-            padding: EdgeInsets.zero,
-            children: [
-              children.when(
-                data: (values) => values.isEmpty
-                    ? const SizedBox.shrink()
-                    : _ChannelSection(channels: values, onOpen: onOpenChannel),
-                loading: () => const LinearProgressIndicator(),
-                error: (_, _) => const Text('子频道加载失败'),
-              ),
-              items.when(
-                data: (values) => values.isEmpty
-                    ? (children.value?.isEmpty ?? true)
-                          ? const _EmptyItems(title: '暂无内容')
-                          : const SizedBox(height: 24)
-                    : Padding(
-                        padding: const EdgeInsets.only(top: 20),
-                        child: _ItemSection(title: '条目', items: values),
-                      ),
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (_, _) => const Text('条目加载失败'),
-              ),
-            ],
           ),
         );
       },
@@ -814,15 +847,15 @@ class _ContentFrame extends StatelessWidget {
               breadcrumbs!,
               const SizedBox(height: 8),
             ],
-            Wrap(
-              spacing: 10,
-              runSpacing: 8,
-              crossAxisAlignment: WrapCrossAlignment.center,
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Text(
-                  title,
-                  style: Theme.of(context).textTheme.titleLarge
-                      ?.copyWith(fontWeight: FontWeight.w700),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: Theme.of(context).textTheme.titleLarge,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
                 ...actions,
               ],
@@ -837,8 +870,9 @@ class _ContentFrame extends StatelessWidget {
 }
 
 class _Breadcrumbs extends ConsumerWidget {
-  const _Breadcrumbs({required this.channelId});
+  const _Breadcrumbs({required this.channelId, required this.onOpenChannel});
   final String channelId;
+  final ValueChanged<Channel> onOpenChannel;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -854,10 +888,20 @@ class _Breadcrumbs extends ConsumerWidget {
                 padding: EdgeInsets.symmetric(horizontal: 6),
                 child: Icon(Icons.chevron_right_rounded, size: 16),
               ),
-              Text(
-                channel.name,
+              TextButton(
                 key: Key('breadcrumb-${channel.id}'),
-                style: Theme.of(context).textTheme.bodySmall,
+                onPressed: channel.id == channelId
+                    ? null
+                    : () => onOpenChannel(channel),
+                style: TextButton.styleFrom(
+                  minimumSize: Size.zero,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 2,
+                    vertical: 1,
+                  ),
+                  textStyle: Theme.of(context).textTheme.bodySmall,
+                ),
+                child: Text(channel.name),
               ),
             ],
           ],
@@ -913,7 +957,12 @@ class _LocationTile extends StatelessWidget {
     selectedTileColor: Theme.of(context).colorScheme.secondaryContainer,
     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
     leading: Icon(icon),
-    title: Text(title),
+    title: Text(
+      title,
+      style: TextStyle(
+        fontWeight: selected ? FontWeight.w500 : FontWeight.w400,
+      ),
+    ),
     trailing: const Icon(Icons.chevron_right_rounded),
     onTap: onTap,
   );
@@ -925,29 +974,77 @@ class _ChannelTile extends StatelessWidget {
     required this.onTap,
     this.selected = false,
     this.nested = false,
+    this.onDeleted,
   });
   final Channel channel;
   final VoidCallback onTap;
   final bool selected;
   final bool nested;
+  final VoidCallback? onDeleted;
 
   @override
-  Widget build(BuildContext context) => _ItemDropTarget(
-    channelId: channel.id,
-    child: ListTile(
-      key: Key('channel-${channel.id}'),
-      dense: true,
-      selected: selected,
-      selectedTileColor: Theme.of(context).colorScheme.secondaryContainer,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      leading: Icon(
-        nested ? Icons.folder_open_outlined : Icons.folder_outlined,
-        size: 20,
+  Widget build(BuildContext context) => _ChannelContextMenuRegion(
+    channel: channel,
+    onOpen: onTap,
+    onDeleted: onDeleted,
+    child: _ItemDropTarget(
+      channelId: channel.id,
+      child: ListTile(
+        key: Key('channel-${channel.id}'),
+        dense: true,
+        selected: selected,
+        selectedTileColor: Theme.of(context).colorScheme.secondaryContainer,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        leading: Icon(
+          nested ? Icons.folder_open_outlined : Icons.folder_outlined,
+          size: 20,
+        ),
+        title: Text(
+          channel.name,
+          style: TextStyle(
+            fontWeight: selected ? FontWeight.w500 : FontWeight.w400,
+          ),
+        ),
+        trailing: const Icon(Icons.chevron_right_rounded, size: 18),
+        onTap: onTap,
       ),
-      title: Text(channel.name),
-      trailing: const Icon(Icons.chevron_right_rounded, size: 18),
-      onTap: onTap,
     ),
+  );
+}
+
+class _ChannelContextMenuRegion extends ConsumerWidget {
+  const _ChannelContextMenuRegion({
+    required this.channel,
+    required this.onOpen,
+    required this.child,
+    this.onDeleted,
+  });
+
+  final Channel channel;
+  final VoidCallback onOpen;
+  final VoidCallback? onDeleted;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => GestureDetector(
+    behavior: HitTestBehavior.opaque,
+    onSecondaryTapDown: (details) async {
+      final action = await showStashMenu<ChannelAction>(
+        context,
+        globalPosition: details.globalPosition,
+        actions: _channelContextMenuActions,
+      );
+      if (action == null || !context.mounted) return;
+      await ChannelActionController.perform(
+        context,
+        ref,
+        channel: channel,
+        action: action,
+        onOpen: onOpen,
+        onDeleted: onDeleted,
+      );
+    },
+    child: child,
   );
 }
 
@@ -976,10 +1073,16 @@ class _EmptyItems extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 24),
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [Text(title, style: Theme.of(context).textTheme.titleLarge)],
+    padding: const EdgeInsets.symmetric(vertical: 12),
+    child: Align(
+      alignment: Alignment.topLeft,
+      child: Text(
+        title,
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+          fontWeight: FontWeight.w400,
+        ),
+      ),
     ),
   );
 }
@@ -1010,7 +1113,7 @@ class _ItemSection extends StatelessWidget {
   );
 }
 
-class _ItemPreview extends StatelessWidget {
+class _ItemPreview extends ConsumerWidget {
   const _ItemPreview({required this.item});
   final Item item;
   static const _codec = ItemDocumentCodec();
@@ -1028,7 +1131,7 @@ class _ItemPreview extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final title = item.title?.trim();
     final desktop = MediaQuery.sizeOf(context).width >= 900;
     final snapshot = _documentSnapshot;
@@ -1050,9 +1153,9 @@ class _ItemPreview extends StatelessWidget {
       child: InkWell(
         key: Key('item-preview-${item.id}'),
         borderRadius: radius,
-        hoverColor: colorScheme.primary.withValues(alpha: 0.055),
-        splashColor: colorScheme.primary.withValues(alpha: 0.10),
-        highlightColor: colorScheme.primary.withValues(alpha: 0.075),
+        hoverColor: colorScheme.onSurface.withValues(alpha: 0.055),
+        splashColor: colorScheme.onSurface.withValues(alpha: 0.10),
+        highlightColor: colorScheme.onSurface.withValues(alpha: 0.075),
         onTap: () => Navigator.of(context).push(
           MaterialPageRoute<void>(
             builder: (_) => ItemDetailScreen(itemId: item.id),
@@ -1088,8 +1191,8 @@ class _ItemPreview extends StatelessWidget {
                     else if (imageAttachmentIds.isNotEmpty)
                       Text(
                         imageAttachmentIds.length == 1
-                            ? 'Image'
-                            : '${imageAttachmentIds.length} images',
+                            ? '图片'
+                            : '${imageAttachmentIds.length} 张图片',
                         style: TextStyle(
                           color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
@@ -1107,7 +1210,7 @@ class _ItemPreview extends StatelessWidget {
                       Text(
                         item.tags.map((tag) => '#$tag').join('  '),
                         style: TextStyle(
-                          color: Theme.of(context).colorScheme.primary,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                       ),
                     ],
@@ -1126,7 +1229,16 @@ class _ItemPreview extends StatelessWidget {
         ),
       ),
     );
-    return desktop ? StashItemDragSource(item: item, child: preview) : preview;
+    final contextTarget = GestureDetector(
+      key: Key('item-context-region-${item.id}'),
+      behavior: HitTestBehavior.opaque,
+      onSecondaryTapDown: (details) =>
+          _showItemContextMenu(context, ref, details.globalPosition, item),
+      child: preview,
+    );
+    return desktop
+        ? StashItemDragSource(item: item, child: contextTarget)
+        : contextTarget;
   }
 }
 
@@ -1137,17 +1249,17 @@ class _ItemFileSummary extends ConsumerWidget {
   final List<String> attachmentIds;
 
   Future<String> _label(AttachmentRepository repository) async {
-    if (attachmentIds.length > 1) return '${attachmentIds.length} files';
+    if (attachmentIds.length > 1) return '${attachmentIds.length} 个文件';
     final attachment = await repository.getAttachmentById(attachmentIds.single);
-    return attachment?.displayName ?? 'File unavailable';
+    return attachment?.displayName ?? '文件不可用';
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) => FutureBuilder<String>(
     future: _label(ref.watch(attachmentRepositoryProvider)),
     initialData: attachmentIds.length == 1
-        ? '1 file'
-        : '${attachmentIds.length} files',
+        ? '1 个文件'
+        : '${attachmentIds.length} 个文件',
     builder: (context, snapshot) => Row(
       key: Key('item-file-summary-$itemId'),
       mainAxisSize: MainAxisSize.min,
@@ -1285,126 +1397,164 @@ Future<void> _createItem(BuildContext context, String? channelId) =>
       ),
     );
 
-Future<void> _createChannel(
+List<StashMenuAction<_NewAction>> _newMenuActions(bool inChannel) => [
+  const StashMenuAction(
+    key: Key('new-item-action'),
+    value: _NewAction.item,
+    label: '新建条目',
+    icon: Icons.note_add_outlined,
+  ),
+  StashMenuAction(
+    key: const Key('new-channel-action'),
+    value: _NewAction.channel,
+    label: inChannel ? '新建子频道' : '新建频道',
+    icon: Icons.create_new_folder_outlined,
+  ),
+];
+
+Future<void> _performNewAction(
   BuildContext context,
   WidgetRef ref,
-  String? parentId,
-) async {
-  final name = await _nameDialog(context, title: '新建频道');
-  if (name == null || !context.mounted) return;
-  try {
-    if (parentId == null) {
-      await ref.read(channelRepositoryProvider).createRootChannel(name: name);
-    } else {
-      await ref
-          .read(channelRepositoryProvider)
-          .createChildChannel(name: name, parentId: parentId);
-    }
-  } catch (error) {
-    if (context.mounted) _showError(context, error.toString());
-  }
-}
-
-Future<void> _manageChannel(
-  BuildContext context,
-  WidgetRef ref,
-  Channel channel,
-  String action,
-  VoidCallback onDeleted,
-) async {
-  try {
-    if (action == 'rename') {
-      final name = await _nameDialog(
-        context,
-        title: '重命名频道',
-        initialValue: channel.name,
-      );
-      if (name != null) {
-        await ref
-            .read(channelRepositoryProvider)
-            .renameChannel(channel.id, name);
-      }
-    } else if (action == 'move') {
-      final selection = await showLocationPicker(
-        context,
-        ref: ref,
-        includeInbox: false,
-        excludedChannelId: channel.id,
-        currentChannelId: channel.parentId,
-      );
-      if (selection != null) {
-        await ref
-            .read(channelRepositoryProvider)
-            .moveChannel(channel.id, parentId: selection.channelId);
-      }
-    } else if (action == 'delete') {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: const Text('删除此频道？'),
-          content: const Text('仅可删除空频道。'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('取消'),
-            ),
-            TextButton(
-              key: const Key('confirm-delete-channel'),
-              onPressed: () => Navigator.pop(dialogContext, true),
-              child: const Text('删除'),
-            ),
-          ],
-        ),
-      );
-      if (confirmed == true) {
-        await ref.read(channelRepositoryProvider).softDeleteChannel(channel.id);
-        onDeleted();
-      }
-    }
-  } catch (error) {
-    if (context.mounted) _showError(context, error.toString());
-  }
-}
-
-Future<String?> _nameDialog(
-  BuildContext context, {
-  required String title,
-  String initialValue = '',
+  _NewAction action, {
+  required String? channelId,
 }) async {
-  final controller = TextEditingController(text: initialValue);
-  final result = await showDialog<String>(
-    context: context,
-    builder: (dialogContext) => AlertDialog(
-      title: Text(title),
-      content: TextField(
-        key: const Key('channel-name-field'),
-        controller: controller,
-        autofocus: true,
-        decoration: const InputDecoration(labelText: '名称'),
-        onSubmitted: (value) {
-          if (value.trim().isNotEmpty) Navigator.pop(dialogContext, value);
-        },
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(dialogContext),
-          child: const Text('取消'),
-        ),
-        FilledButton(
-          key: const Key('save-channel'),
-          onPressed: () {
-            if (controller.text.trim().isNotEmpty) {
-              Navigator.pop(dialogContext, controller.text);
-            }
-          },
-          child: const Text('保存'),
-        ),
-      ],
-    ),
-  );
-  return result;
+  if (action == _NewAction.item) {
+    await _createItem(context, channelId);
+  } else {
+    await ChannelActionController.create(context, ref, parentId: channelId);
+  }
 }
 
-void _showError(BuildContext context, String message) {
-  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+const _channelManagementMenuActions = <StashMenuAction<ChannelAction>>[
+  StashMenuAction(
+    key: Key('channel-action-rename'),
+    value: ChannelAction.rename,
+    label: '重命名',
+    icon: Icons.edit_outlined,
+  ),
+  StashMenuAction(
+    key: Key('channel-action-move'),
+    value: ChannelAction.move,
+    label: '移动',
+    icon: Icons.drive_file_move_outline,
+  ),
+  StashMenuAction(
+    key: Key('delete-channel-action'),
+    value: ChannelAction.delete,
+    label: '删除',
+    icon: Icons.delete_outline,
+    destructive: true,
+    dividerBefore: true,
+  ),
+];
+
+const _channelContextMenuActions = <StashMenuAction<ChannelAction>>[
+  StashMenuAction(
+    key: Key('channel-context-open'),
+    value: ChannelAction.open,
+    label: '打开',
+    icon: Icons.folder_open_outlined,
+  ),
+  StashMenuAction(
+    key: Key('channel-context-new-child'),
+    value: ChannelAction.createChild,
+    label: '新建子频道',
+    icon: Icons.create_new_folder_outlined,
+  ),
+  StashMenuAction(
+    key: Key('channel-context-rename'),
+    value: ChannelAction.rename,
+    label: '重命名',
+    icon: Icons.edit_outlined,
+    dividerBefore: true,
+  ),
+  StashMenuAction(
+    key: Key('channel-context-move'),
+    value: ChannelAction.move,
+    label: '移动',
+    icon: Icons.drive_file_move_outline,
+  ),
+  StashMenuAction(
+    key: Key('channel-context-delete'),
+    value: ChannelAction.delete,
+    label: '删除',
+    icon: Icons.delete_outline,
+    destructive: true,
+    dividerBefore: true,
+  ),
+];
+
+Future<void> _showChannelCreateMenu(
+  BuildContext context,
+  WidgetRef ref,
+  Offset position,
+  String channelId,
+) async {
+  final action = await showStashMenu<_NewAction>(
+    context,
+    globalPosition: position,
+    actions: _newMenuActions(true),
+  );
+  if (action != null && context.mounted) {
+    await _performNewAction(context, ref, action, channelId: channelId);
+  }
+}
+
+Future<void> _showItemContextMenu(
+  BuildContext context,
+  WidgetRef ref,
+  Offset position,
+  Item item,
+) async {
+  final action = await showStashMenu<_ItemMenuAction>(
+    context,
+    globalPosition: position,
+    actions: [
+      const StashMenuAction(
+        key: Key('item-context-open'),
+        value: _ItemMenuAction.open,
+        label: '打开',
+        icon: Icons.open_in_new_rounded,
+      ),
+      StashMenuAction(
+        key: const Key('item-context-pin'),
+        value: _ItemMenuAction.togglePin,
+        label: item.isPinned ? '取消置顶' : '置顶',
+        icon: item.isPinned ? Icons.push_pin : Icons.push_pin_outlined,
+      ),
+      const StashMenuAction(
+        key: Key('item-context-move'),
+        value: _ItemMenuAction.move,
+        label: '移动到…',
+        icon: Icons.drive_file_move_outline,
+      ),
+      const StashMenuAction(
+        key: Key('item-context-delete'),
+        value: _ItemMenuAction.delete,
+        label: '删除',
+        icon: Icons.delete_outline,
+        destructive: true,
+        dividerBefore: true,
+      ),
+    ],
+  );
+  if (action == null || !context.mounted) return;
+  switch (action) {
+    case _ItemMenuAction.open:
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => ItemDetailScreen(itemId: item.id),
+        ),
+      );
+      return;
+    case _ItemMenuAction.togglePin:
+      await ItemActionController.togglePin(context, ref, item);
+      return;
+    case _ItemMenuAction.move:
+      await ItemActionController.move(context, ref, item);
+      return;
+    case _ItemMenuAction.delete:
+      await ItemActionController.delete(context, ref, item);
+      return;
+  }
 }

@@ -3,8 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/providers.dart';
-import '../../channels/presentation/location_picker.dart';
 import '../domain/item.dart';
+import 'item_actions.dart';
 import 'item_document_view.dart';
 import 'item_editor_screen.dart';
 
@@ -39,68 +39,22 @@ class _ItemDetail extends ConsumerWidget {
     await Clipboard.setData(ClipboardData(text: item.content));
     if (!context.mounted) return;
     ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('Copied to clipboard')));
+        .showSnackBar(const SnackBar(content: Text('已复制到剪贴板')));
   }
 
   Future<void> _togglePin(BuildContext context, WidgetRef ref) async {
-    try {
-      await ref.read(itemRepositoryProvider).setPinned(item.id, !item.isPinned);
-    } catch (_) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Could not update item.')));
-    }
+    await ItemActionController.togglePin(context, ref, item);
   }
 
   Future<void> _delete(BuildContext context, WidgetRef ref) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Delete this item?'),
-        content: const Text('It will disappear from Stash on this device.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            key: const Key('confirm-delete-button'),
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !context.mounted) return;
-    try {
-      await ref.read(itemRepositoryProvider).softDeleteItem(item.id);
-      if (context.mounted) Navigator.of(context).pop();
-    } catch (_) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Could not delete item.')));
+    final deleted = await ItemActionController.delete(context, ref, item);
+    if (deleted && context.mounted) {
+      Navigator.of(context).pop();
     }
   }
 
   Future<void> _move(BuildContext context, WidgetRef ref) async {
-    final selection = await showLocationPicker(
-      context,
-      ref: ref,
-      currentChannelId: item.channelId,
-    );
-    if (selection == null || !context.mounted) return;
-    try {
-      await ref
-          .read(itemRepositoryProvider)
-          .moveItem(item.id, channelId: selection.channelId);
-    } catch (_) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not move this item.')),
-      );
-    }
+    await ItemActionController.move(context, ref, item);
   }
 
   @override
@@ -110,7 +64,7 @@ class _ItemDetail extends ConsumerWidget {
         ? null
         : ref.watch(channelByIdProvider(item.channelId!));
     return Scaffold(
-      appBar: AppBar(title: const Text('Item')),
+      appBar: AppBar(title: const Text('条目')),
       body: SafeArea(
         top: false,
         child: Center(
@@ -136,7 +90,7 @@ class _ItemDetail extends ConsumerWidget {
                 if (item.note case final note?) ...[
                   if (note.trim().isNotEmpty) ...[
                     const SizedBox(height: 32),
-                    Text('Note', style: Theme.of(context).textTheme.titleSmall),
+                    Text('备注', style: Theme.of(context).textTheme.titleSmall),
                     const SizedBox(height: 8),
                     Text(
                       note,
@@ -164,7 +118,7 @@ class _ItemDetail extends ConsumerWidget {
                 ],
                 const SizedBox(height: 24),
                 Text(
-                  'Location: ${item.channelId == null ? 'Inbox' : channel?.value?.name ?? 'Channel'}',
+                  '位置：${item.channelId == null ? '收件箱' : channel?.value?.name ?? '频道'}',
                   key: const Key('item-location'),
                   style: _metadataStyle(context),
                 ),
@@ -177,7 +131,7 @@ class _ItemDetail extends ConsumerWidget {
                       key: const Key('copy-item-button'),
                       onPressed: () => _copy(context),
                       icon: const Icon(Icons.copy_rounded, size: 18),
-                      label: const Text('Copy'),
+                      label: const Text('复制'),
                     ),
                     TextButton.icon(
                       key: const Key('edit-item-button'),
@@ -187,13 +141,13 @@ class _ItemDetail extends ConsumerWidget {
                         ),
                       ),
                       icon: const Icon(Icons.edit_outlined, size: 18),
-                      label: const Text('Edit'),
+                      label: const Text('编辑'),
                     ),
                     TextButton.icon(
                       key: const Key('move-item-button'),
                       onPressed: () => _move(context, ref),
                       icon: const Icon(Icons.drive_file_move_outline, size: 18),
-                      label: const Text('Move'),
+                      label: const Text('移动'),
                     ),
                     TextButton.icon(
                       key: const Key('pin-item-button'),
@@ -204,13 +158,13 @@ class _ItemDetail extends ConsumerWidget {
                             : Icons.push_pin_outlined,
                         size: 18,
                       ),
-                      label: Text(item.isPinned ? 'Unpin' : 'Pin'),
+                      label: Text(item.isPinned ? '取消置顶' : '置顶'),
                     ),
                     TextButton.icon(
                       key: const Key('delete-item-button'),
                       onPressed: () => _delete(context, ref),
                       icon: const Icon(Icons.delete_outline, size: 18),
-                      label: const Text('Delete'),
+                      label: const Text('删除'),
                       style: TextButton.styleFrom(
                         foregroundColor: Theme.of(context).colorScheme.error,
                       ),
@@ -219,12 +173,12 @@ class _ItemDetail extends ConsumerWidget {
                 ),
                 const SizedBox(height: 36),
                 Text(
-                  'Created ${_formatTimestamp(item.createdAt)}',
+                  '创建于 ${_formatTimestamp(item.createdAt)}',
                   style: _metadataStyle(context),
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'Updated ${_formatTimestamp(item.updatedAt)}',
+                  '更新于 ${_formatTimestamp(item.updatedAt)}',
                   style: _metadataStyle(context),
                 ),
               ],
@@ -254,7 +208,7 @@ class _UnavailableItemScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(),
-      body: const Center(child: Text('This item is no longer available.')),
+      body: const Center(child: Text('条目不可用')),
     );
   }
 }
