@@ -104,55 +104,68 @@ class _StashSurfaceHostState extends State<StashSurfaceHost> {
 }
 
 ThemeData createStashTheme(Brightness brightness) {
-  const seed = Color(0xFF527660);
   final dark = brightness == Brightness.dark;
   final generated = ColorScheme.fromSeed(
-    seedColor: seed,
+    seedColor: const Color(0xFF676C71),
     brightness: brightness,
-    surface: dark ? const Color(0xFF151815) : const Color(0xFFFAFBF8),
+    surface: dark ? const Color(0xFF151617) : const Color(0xFFFAFAF9),
   );
   final scheme = dark
       ? generated.copyWith(
-          primary: const Color(0xFF86B394),
-          onPrimary: const Color(0xFF12351F),
-          primaryContainer: const Color(0xFF294A35),
-          onPrimaryContainer: const Color(0xFFD0E8D6),
-          secondary: const Color(0xFFB9C2BB),
-          onSecondary: const Color(0xFF253029),
-          secondaryContainer: const Color(0xFF2B3730),
-          onSecondaryContainer: const Color(0xFFDCE8DF),
-          tertiary: const Color(0xFFBFC3C7),
-          tertiaryContainer: const Color(0xFF303438),
+          primary: const Color(0xFFE6E8EA),
+          onPrimary: const Color(0xFF1A1C1E),
+          primaryContainer: const Color(0xFF34373A),
+          onPrimaryContainer: const Color(0xFFF1F2F3),
+          secondary: const Color(0xFFC1C4C7),
+          onSecondary: const Color(0xFF24272A),
+          secondaryContainer: const Color(0xFF303336),
+          onSecondaryContainer: const Color(0xFFE8EAEC),
+          tertiary: const Color(0xFFBEC2C5),
+          tertiaryContainer: const Color(0xFF303336),
           surface: const Color(0xFF151617),
           surfaceDim: const Color(0xFF111213),
           surfaceBright: const Color(0xFF35373A),
           surfaceContainerLowest: const Color(0xFF101112),
-          surfaceContainerLow: const Color(0xFF1B1C1E),
-          surfaceContainer: const Color(0xFF202225),
-          surfaceContainerHigh: const Color(0xFF27292C),
-          surfaceContainerHighest: const Color(0xFF303236),
+          surfaceContainerLow: const Color(0xFF191A1C),
+          surfaceContainer: const Color(0xFF1E2022),
+          surfaceContainerHigh: const Color(0xFF25272A),
+          surfaceContainerHighest: const Color(0xFF2D3033),
           outline: const Color(0xFF8A8D91),
-          outlineVariant: const Color(0xFF45484C),
+          outlineVariant: const Color(0xFF414448),
         )
       : generated.copyWith(
-          surface: const Color(0xFFFAFBF8),
-          surfaceDim: const Color(0xFFDADCD8),
-          surfaceBright: const Color(0xFFFAFBF8),
+          primary: const Color(0xFF24272A),
+          onPrimary: const Color(0xFFFFFFFF),
+          primaryContainer: const Color(0xFFDFE2E5),
+          onPrimaryContainer: const Color(0xFF1D2023),
+          secondary: const Color(0xFF555B60),
+          onSecondary: const Color(0xFFFFFFFF),
+          secondaryContainer: const Color(0xFFE5E8EA),
+          onSecondaryContainer: const Color(0xFF24272A),
+          tertiary: const Color(0xFF5A6065),
+          tertiaryContainer: const Color(0xFFE3E6E8),
+          surface: const Color(0xFFFAFAF9),
+          surfaceDim: const Color(0xFFDADBD9),
+          surfaceBright: const Color(0xFFFAFAF9),
           surfaceContainerLowest: const Color(0xFFFFFFFF),
-          surfaceContainerLow: const Color(0xFFF5F6F3),
-          surfaceContainer: const Color(0xFFEFF1ED),
-          surfaceContainerHigh: const Color(0xFFE9EBE7),
-          surfaceContainerHighest: const Color(0xFFE3E5E1),
-          outline: const Color(0xFF747974),
-          outlineVariant: const Color(0xFFC4C8C3),
-          secondaryContainer: const Color(0xFFDCE9DF),
-          onSecondaryContainer: const Color(0xFF22382A),
+          surfaceContainerLow: const Color(0xFFF4F4F2),
+          surfaceContainer: const Color(0xFFEFEFED),
+          surfaceContainerHigh: const Color(0xFFE8E9E7),
+          surfaceContainerHighest: const Color(0xFFE1E3E1),
+          outline: const Color(0xFF73777A),
+          outlineVariant: const Color(0xFFC5C8CA),
         );
-  return ThemeData(
+  final base = ThemeData(
     useMaterial3: true,
     visualDensity: const VisualDensity(horizontal: -1, vertical: -1),
     brightness: brightness,
     colorScheme: scheme,
+    fontFamily: 'Segoe UI Variable',
+    fontFamilyFallback: const [
+      'Segoe UI',
+      'Microsoft YaHei UI',
+      'Microsoft YaHei',
+    ],
     scaffoldBackgroundColor: scheme.surface,
     canvasColor: scheme.surface,
     dividerColor: scheme.outlineVariant,
@@ -169,5 +182,54 @@ ThemeData createStashTheme(Brightness brightness) {
       labelStyle: TextStyle(color: scheme.onSurfaceVariant),
     ),
     dividerTheme: DividerThemeData(color: scheme.outlineVariant),
+    listTileTheme: ListTileThemeData(
+      iconColor: scheme.onSurfaceVariant,
+      selectedColor: scheme.onSurface,
+      selectedTileColor: scheme.secondaryContainer,
+    ),
+    popupMenuTheme: PopupMenuThemeData(
+      color: scheme.surfaceContainerHigh,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(color: scheme.outlineVariant),
+      ),
+      textStyle: TextStyle(color: scheme.onSurface, fontSize: 14),
+    ),
   );
+  final textTheme = base.textTheme.copyWith(
+    headlineSmall: base.textTheme.headlineSmall?.copyWith(
+      fontWeight: FontWeight.w600,
+      letterSpacing: 0,
+    ),
+    titleLarge: base.textTheme.titleLarge?.copyWith(
+      fontWeight: FontWeight.w600,
+      letterSpacing: 0,
+    ),
+    titleMedium: base.textTheme.titleMedium?.copyWith(
+      fontWeight: FontWeight.w600,
+      letterSpacing: 0,
+    ),
+    titleSmall: base.textTheme.titleSmall?.copyWith(
+      fontWeight: FontWeight.w500,
+      letterSpacing: 0,
+    ),
+    bodyLarge: base.textTheme.bodyLarge?.copyWith(
+      fontWeight: FontWeight.w400,
+      letterSpacing: 0,
+    ),
+    bodyMedium: base.textTheme.bodyMedium?.copyWith(
+      fontWeight: FontWeight.w400,
+      letterSpacing: 0,
+    ),
+    bodySmall: base.textTheme.bodySmall?.copyWith(
+      fontWeight: FontWeight.w400,
+      letterSpacing: 0,
+    ),
+    labelLarge: base.textTheme.labelLarge?.copyWith(
+      fontWeight: FontWeight.w500,
+      letterSpacing: 0,
+    ),
+  );
+  return base.copyWith(textTheme: textTheme, primaryTextTheme: textTheme);
 }
