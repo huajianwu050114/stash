@@ -41,7 +41,9 @@ void main() {
     await pumpApp(tester);
 
     expect(find.byKey(const Key('empty-home')), findsOneWidget);
-    await tester.tap(find.byKey(const Key('new-item-button')));
+    await tester.tap(find.byKey(const Key('global-new-button')));
+    await pumpUi(tester);
+    await tester.tap(find.byKey(const Key('new-item-action')));
     await pumpUi(tester);
 
     expect(find.text('New item'), findsOneWidget);
@@ -108,7 +110,7 @@ void main() {
       await pumpUi(tester);
       expect(clipboardCall?.method, 'Clipboard.setData');
       expect(clipboardCall?.arguments, {'text': item.content});
-      expect(find.text('Copied to clipboard'), findsOneWidget);
+      expect(find.text('已复制到剪贴板'), findsOneWidget);
 
       await tester.tap(find.byKey(const Key('edit-item-button')));
       await pumpUi(tester);
@@ -152,7 +154,7 @@ void main() {
     await pumpUi(tester);
     await tester.tap(find.byKey(const Key('pin-item-button')));
     await pumpUi(tester);
-    expect(find.text('Unpin'), findsOneWidget);
+    expect(find.text('取消置顶'), findsOneWidget);
     await tester.pageBack();
     await pumpUi(tester);
 
@@ -198,7 +200,7 @@ void main() {
     await pumpUi(tester);
     await tester.tap(find.byKey(const Key('delete-item-button')));
     await tester.pump();
-    expect(find.text('Delete this item?'), findsOneWidget);
+    expect(find.text('删除此条目？'), findsOneWidget);
     await tester.tap(find.byKey(const Key('confirm-delete-button')));
     await pumpUi(tester);
 

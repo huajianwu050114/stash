@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stash/app/app.dart';
 import 'package:stash/app/desktop_shell_preferences.dart';
 import 'package:stash/app/providers.dart';
+import 'package:stash/app/stash_menu.dart';
 import 'package:stash/core/database/app_database.dart';
 import 'package:stash/features/channels/data/channel_repository.dart';
 import 'package:stash/features/items/data/item_document_codec.dart';
@@ -59,7 +62,7 @@ void main() {
     'narrow root creates and browses nested channels with breadcrumbs',
     (tester) async {
       await pumpApp(tester, size: const Size(430, 800));
-      expect(find.byKey(const Key('new-item-button')), findsOneWidget);
+      expect(find.byKey(const Key('global-new-button')), findsOneWidget);
       expect(find.byKey(const Key('empty-add-item')), findsNothing);
       expect(find.text('暂无频道'), findsOneWidget);
       expect(find.text('暂无条目'), findsOneWidget);
@@ -78,7 +81,9 @@ void main() {
       await pumpUi(tester);
       expect(find.byKey(Key('breadcrumb-${root.id}')), findsOneWidget);
 
-      await tester.tap(find.byKey(const Key('new-subchannel')));
+      await tester.tap(find.byKey(const Key('global-new-button')));
+      await pumpUi(tester);
+      await tester.tap(find.byKey(const Key('new-channel-action')));
       await pumpUi(tester);
       await tester.enterText(
         find.byKey(const Key('channel-name-field')),
@@ -94,7 +99,7 @@ void main() {
 
       expect(find.byKey(Key('breadcrumb-${root.id}')), findsOneWidget);
       expect(find.byKey(Key('breadcrumb-${child.id}')), findsOneWidget);
-      await tester.tap(find.byKey(const Key('channel-up')));
+      await tester.tap(find.byKey(Key('breadcrumb-${root.id}')));
       await pumpUi(tester);
       expect(find.text('Network'), findsWidgets);
       expect(find.byKey(Key('breadcrumb-${child.id}')), findsNothing);
@@ -107,7 +112,9 @@ void main() {
     await pumpApp(tester, size: const Size(430, 800));
     await tester.tap(find.byKey(Key('channel-${channel.id}')));
     await pumpUi(tester);
-    await tester.tap(find.byKey(const Key('add-channel-item')));
+    await tester.tap(find.byKey(const Key('global-new-button')));
+    await pumpUi(tester);
+    await tester.tap(find.byKey(const Key('new-item-action')));
     await pumpUi(tester);
     await enterDocumentText(tester, 'Channel item');
     await tester.tap(find.byKey(const Key('save-item-button')));
@@ -121,7 +128,9 @@ void main() {
 
   testWidgets('root quick capture creates an Inbox item', (tester) async {
     await pumpApp(tester, size: const Size(430, 800));
-    await tester.tap(find.byKey(const Key('new-item-button')));
+    await tester.tap(find.byKey(const Key('global-new-button')));
+    await pumpUi(tester);
+    await tester.tap(find.byKey(const Key('new-item-action')));
     await pumpUi(tester);
     await enterDocumentText(tester, 'Inbox item');
     await tester.tap(find.byKey(const Key('save-item-button')));
@@ -152,7 +161,7 @@ void main() {
 
     await pumpApp(tester, size: const Size(430, 800));
 
-    expect(find.text('2 images'), findsOneWidget);
+    expect(find.text('2 张图片'), findsOneWidget);
     expect(
       tester.getSize(find.byKey(Key('item-thumbnail-${item.id}'))),
       const Size.square(80),
@@ -224,7 +233,7 @@ void main() {
     await pumpUi(tester);
 
     expect((await items.getItemById(item.id))!.channelId, second.id);
-    expect(find.text('Location: Second'), findsOneWidget);
+    expect(find.text('位置：Second'), findsOneWidget);
     await disposeApp(tester);
   });
 
@@ -234,13 +243,14 @@ void main() {
     final channel = await channels.createRootChannel(id: 'wide', name: 'Wide');
     await pumpApp(tester, size: const Size(1200, 800));
     expect(find.byKey(const Key('wide-browser')), findsOneWidget);
-    expect(find.byKey(const Key('new-item-button')), findsOneWidget);
+    expect(find.byKey(const Key('global-new-button')), findsOneWidget);
     expect(find.text('收件箱'), findsWidgets);
 
     await tester.tap(find.byKey(Key('channel-${channel.id}')));
     await pumpUi(tester);
-    expect(find.byKey(const Key('add-channel-item')), findsOneWidget);
-    expect(find.byKey(const Key('new-subchannel')), findsOneWidget);
+    expect(find.byKey(const Key('add-channel-item')), findsNothing);
+    expect(find.byKey(const Key('new-subchannel')), findsNothing);
+    expect(find.byKey(const Key('channel-menu')), findsOneWidget);
     await disposeApp(tester);
   });
 
@@ -267,7 +277,7 @@ void main() {
     await disposeApp(tester);
   });
 
-  testWidgets('empty channel keeps header actions without duplicate copy', (
+  testWidgets('empty channel removes duplicate actions and empty hero', (
     tester,
   ) async {
     final channel = await channels.createRootChannel(
@@ -279,13 +289,272 @@ void main() {
     await tester.tap(find.byKey(Key('channel-${channel.id}')));
     await pumpUi(tester);
 
-    expect(find.text('暂无内容'), findsOneWidget);
+    expect(find.text('暂无内容'), findsNothing);
     expect(find.text('Add an item or create a subchannel.'), findsNothing);
     expect(find.byKey(const Key('empty-add-item')), findsNothing);
-    expect(find.byKey(const Key('add-channel-item')), findsOneWidget);
-    expect(find.text('添加条目'), findsWidgets);
-    expect(find.byKey(const Key('new-subchannel')), findsOneWidget);
+    expect(find.byKey(const Key('add-channel-item')), findsNothing);
+    expect(find.text('添加条目'), findsNothing);
+    expect(find.byKey(const Key('new-subchannel')), findsNothing);
+    expect(find.byKey(const Key('global-new-button')), findsOneWidget);
+    await disposeApp(tester);
+  });
+
+  testWidgets('global new follows Inbox, Pinned, and Channel context', (
+    tester,
+  ) async {
+    final channel = await channels.createRootChannel(
+      id: 'global-new-parent',
+      name: 'Global parent',
+    );
+    await pumpApp(tester, size: const Size(1200, 800));
+
+    await tester.tap(find.byKey(const Key('global-new-button')));
+    await pumpUi(tester);
+    expect(find.text('新建条目'), findsOneWidget);
+    expect(find.text('新建频道'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('new-channel-action')));
+    await pumpUi(tester);
+    await tester.enterText(
+      find.byKey(const Key('channel-name-field')),
+      'Root from new',
+    );
+    await tester.tap(find.byKey(const Key('save-channel')));
+    await pumpUi(tester);
+    expect(
+      (await channels.getActiveChannels())
+          .singleWhere((value) => value.name == 'Root from new')
+          .parentId,
+      isNull,
+    );
+
+    await tester.tap(find.byKey(const Key('open-pinned')));
+    await pumpUi(tester);
+    await tester.tap(find.byKey(const Key('global-new-button')));
+    await pumpUi(tester);
+    expect(find.text('新建条目'), findsOneWidget);
+    expect(find.text('新建频道'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('new-item-action')));
+    await pumpUi(tester);
+    await enterDocumentText(tester, 'Pinned-created Inbox item');
+    await tester.tap(find.byKey(const Key('save-item-button')));
+    await pumpUi(tester);
+    expect(
+      (await db.select(db.items).get())
+          .singleWhere((value) => value.content == 'Pinned-created Inbox item')
+          .channelId,
+      isNull,
+    );
+
+    await tester.tap(find.byKey(Key('channel-${channel.id}')));
+    await pumpUi(tester);
+    await tester.tap(find.byKey(const Key('global-new-button')));
+    await pumpUi(tester);
+    expect(find.text('新建条目'), findsOneWidget);
     expect(find.text('新建子频道'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('new-channel-action')));
+    await pumpUi(tester);
+    await tester.enterText(
+      find.byKey(const Key('channel-name-field')),
+      'Child from new',
+    );
+    await tester.tap(find.byKey(const Key('save-channel')));
+    await pumpUi(tester);
+    expect(
+      (await channels.getActiveChannels())
+          .singleWhere((value) => value.name == 'Child from new')
+          .parentId,
+      channel.id,
+    );
+    await disposeApp(tester);
+  });
+
+  testWidgets('channel menus are compact, shared, and invoke actions', (
+    tester,
+  ) async {
+    final channel = await channels.createRootChannel(
+      id: 'menu-channel',
+      name: 'Menu channel',
+    );
+    await pumpApp(tester, size: const Size(1200, 800));
+    await tester.tap(find.byKey(Key('channel-${channel.id}')));
+    await pumpUi(tester);
+
+    expect(
+      find.byWidgetPredicate((widget) => widget is StashMenuButton),
+      findsWidgets,
+    );
+    expect(find.byType(PopupMenuButton), findsNothing);
+    await tester.tap(find.byKey(const Key('channel-menu')));
+    await pumpUi(tester);
+    expect(find.text('重命名'), findsOneWidget);
+    expect(find.text('移动'), findsOneWidget);
+    expect(find.text('删除'), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is PopupMenuItem && widget.height == 34,
+      ),
+      findsNWidgets(3),
+    );
+    final deleteLabel = find.descendant(
+      of: find.byKey(const Key('delete-channel-action')),
+      matching: find.text('删除'),
+    );
+    expect(
+      DefaultTextStyle.of(tester.element(deleteLabel)).style.color,
+      Theme.of(tester.element(deleteLabel)).colorScheme.error,
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await pumpUi(tester);
+    expect(find.byKey(const Key('channel-action-rename')), findsNothing);
+    await tester.tap(find.byKey(const Key('channel-menu')));
+    await pumpUi(tester);
+    await tester.tap(find.byKey(const Key('channel-action-rename')));
+    await pumpUi(tester);
+    await tester.enterText(
+      find.byKey(const Key('channel-name-field')),
+      'Renamed channel',
+    );
+    await tester.tap(find.byKey(const Key('save-channel')));
+    await pumpUi(tester);
+    expect(
+      (await channels.getChannelById(channel.id))!.name,
+      'Renamed channel',
+    );
+
+    await tester.tap(
+      find.byKey(Key('channel-${channel.id}')),
+      buttons: kSecondaryMouseButton,
+    );
+    await pumpUi(tester);
+    expect(find.text('打开'), findsOneWidget);
+    expect(find.text('新建子频道'), findsOneWidget);
+    expect(find.text('重命名'), findsOneWidget);
+    expect(find.text('移动'), findsOneWidget);
+    expect(find.text('删除'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('channel-context-new-child')));
+    await pumpUi(tester);
+    await tester.enterText(
+      find.byKey(const Key('channel-name-field')),
+      'Context child',
+    );
+    await tester.tap(find.byKey(const Key('save-channel')));
+    await pumpUi(tester);
+    expect(
+      (await channels.getActiveChannels())
+          .singleWhere((value) => value.name == 'Context child')
+          .parentId,
+      channel.id,
+    );
+    await disposeApp(tester);
+  });
+
+  testWidgets('empty Channel content has a pointer-local creation menu', (
+    tester,
+  ) async {
+    final channel = await channels.createRootChannel(
+      id: 'content-menu',
+      name: 'Content menu',
+    );
+    await pumpApp(tester, size: const Size(1200, 800));
+    await tester.tap(find.byKey(Key('channel-${channel.id}')));
+    await pumpUi(tester);
+
+    await tester.tap(
+      find.byKey(const Key('channel-content-area')),
+      buttons: kSecondaryMouseButton,
+    );
+    await pumpUi(tester);
+    expect(find.text('新建条目'), findsOneWidget);
+    expect(find.text('新建子频道'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('new-channel-action')));
+    await pumpUi(tester);
+    await tester.enterText(
+      find.byKey(const Key('channel-name-field')),
+      'Content child',
+    );
+    await tester.tap(find.byKey(const Key('save-channel')));
+    await pumpUi(tester);
+    expect(
+      (await channels.getActiveChannels())
+          .singleWhere((value) => value.name == 'Content child')
+          .parentId,
+      channel.id,
+    );
+    await disposeApp(tester);
+  });
+
+  testWidgets('Item right-click actions pin, move, and safely delete', (
+    tester,
+  ) async {
+    final target = await channels.createRootChannel(
+      id: 'item-menu-target',
+      name: 'Item menu target',
+    );
+    final item = await items.createItem(
+      id: 'context-item',
+      content: 'Context item',
+    );
+    await pumpApp(tester, size: const Size(1200, 800));
+
+    await tester.tap(
+      find.byKey(Key('item-preview-${item.id}')),
+      buttons: kSecondaryMouseButton,
+    );
+    await pumpUi(tester);
+    expect(find.text('打开'), findsOneWidget);
+    expect(find.byKey(const Key('item-context-pin')), findsOneWidget);
+    expect(find.text('移动到…'), findsOneWidget);
+    expect(find.text('删除'), findsOneWidget);
+    expect(find.text('新建条目'), findsNothing);
+    await tester.tap(find.byKey(const Key('item-context-open')));
+    await pumpUi(tester);
+    expect(find.byKey(const Key('move-item-button')), findsOneWidget);
+    await tester.pageBack();
+    await pumpUi(tester);
+
+    await tester.tap(
+      find.byKey(Key('item-preview-${item.id}')),
+      buttons: kSecondaryMouseButton,
+    );
+    await pumpUi(tester);
+    await tester.tap(find.byKey(const Key('item-context-pin')));
+    await pumpUi(tester);
+    expect((await items.getItemById(item.id))!.isPinned, isTrue);
+
+    await tester.tap(
+      find.byKey(Key('item-preview-${item.id}')),
+      buttons: kSecondaryMouseButton,
+    );
+    await pumpUi(tester);
+    expect(find.text('取消置顶'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('item-context-pin')));
+    await pumpUi(tester);
+    expect((await items.getItemById(item.id))!.isPinned, isFalse);
+
+    await tester.tap(
+      find.byKey(Key('item-preview-${item.id}')),
+      buttons: kSecondaryMouseButton,
+    );
+    await pumpUi(tester);
+    await tester.tap(find.byKey(const Key('item-context-move')));
+    await pumpUi(tester);
+    await tester.tap(find.byKey(Key('location-${target.id}')));
+    await pumpUi(tester);
+    expect((await items.getItemById(item.id))!.channelId, target.id);
+
+    await tester.tap(find.byKey(Key('channel-${target.id}')));
+    await pumpUi(tester);
+    await tester.tap(
+      find.byKey(Key('item-preview-${item.id}')),
+      buttons: kSecondaryMouseButton,
+    );
+    await pumpUi(tester);
+    await tester.tap(find.byKey(const Key('item-context-delete')));
+    await pumpUi(tester);
+    expect(find.text('删除此条目？'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('confirm-delete-button')));
+    await pumpUi(tester);
+    expect((await items.getItemById(item.id))!.isDeleted, isTrue);
     await disposeApp(tester);
   });
 

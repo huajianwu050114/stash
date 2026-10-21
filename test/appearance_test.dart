@@ -8,22 +8,34 @@ import 'package:stash/app/providers.dart';
 import 'test_database.dart';
 
 void main() {
-  test('theme keeps neutral surfaces and green as a restrained accent', () {
-    final dark = createStashTheme(Brightness.dark).colorScheme;
+  test('theme uses a neutral palette and explicit Windows typography', () {
+    final darkTheme = createStashTheme(Brightness.dark);
+    final dark = darkTheme.colorScheme;
     expect(dark.surface, const Color(0xFF151617));
-    expect(dark.surfaceContainerLow, const Color(0xFF1B1C1E));
-    expect(dark.surfaceContainer, const Color(0xFF202225));
-    expect(dark.surfaceContainerHigh, const Color(0xFF27292C));
-    expect(dark.surfaceContainerHighest, const Color(0xFF303236));
-    expect(dark.outlineVariant, const Color(0xFF45484C));
-    expect(dark.primary, const Color(0xFF86B394));
-    expect(dark.secondaryContainer, const Color(0xFF2B3730));
+    expect(dark.surfaceContainerLow, const Color(0xFF191A1C));
+    expect(dark.surfaceContainer, const Color(0xFF1E2022));
+    expect(dark.surfaceContainerHigh, const Color(0xFF25272A));
+    expect(dark.surfaceContainerHighest, const Color(0xFF2D3033));
+    expect(dark.outlineVariant, const Color(0xFF414448));
+    expect(dark.primary, const Color(0xFFE6E8EA));
+    expect(dark.primaryContainer, const Color(0xFF34373A));
+    expect(dark.secondaryContainer, const Color(0xFF303336));
+    expect(dark.error.r, greaterThan(dark.error.g));
+    expect(darkTheme.textTheme.bodyMedium?.fontFamily, 'Segoe UI Variable');
+    expect(
+      darkTheme.textTheme.bodyMedium?.fontFamilyFallback,
+      containsAll(['Segoe UI', 'Microsoft YaHei UI', 'Microsoft YaHei']),
+    );
+    expect(darkTheme.textTheme.titleLarge?.fontWeight, FontWeight.w600);
+    expect(darkTheme.textTheme.titleSmall?.fontWeight, FontWeight.w500);
+    expect(darkTheme.textTheme.bodyMedium?.fontWeight, FontWeight.w400);
 
     final light = createStashTheme(Brightness.light).colorScheme;
-    expect(light.surface, const Color(0xFFFAFBF8));
-    expect(light.surfaceContainerLow, const Color(0xFFF5F6F3));
-    expect(light.surfaceContainerHighest, const Color(0xFFE3E5E1));
-    expect(light.outlineVariant, const Color(0xFFC4C8C3));
+    expect(light.surface, const Color(0xFFFAFAF9));
+    expect(light.primary, const Color(0xFF24272A));
+    expect(light.surfaceContainerLow, const Color(0xFFF4F4F2));
+    expect(light.surfaceContainerHighest, const Color(0xFFE1E3E1));
+    expect(light.outlineVariant, const Color(0xFFC5C8CA));
   });
 
   test('appearance defaults to system and persists explicit choices', () async {
@@ -64,7 +76,9 @@ void main() {
       Theme.of(tester.element(find.byKey(const Key('empty-home')))).brightness,
       Brightness.dark,
     );
-    await tester.tap(find.byKey(const Key('new-item-button')));
+    await tester.tap(find.byKey(const Key('global-new-button')));
+    await _pumpUi(tester);
+    await tester.tap(find.byKey(const Key('new-item-action')));
     await _pumpUi(tester);
     final editorContext = tester.element(
       find.byKey(const Key('content-field')),

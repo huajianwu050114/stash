@@ -81,7 +81,9 @@ void main() {
     tester,
   ) async {
     await pumpApp(tester);
-    await tester.tap(find.byKey(const Key('new-item-button')));
+    await tester.tap(find.byKey(const Key('global-new-button')));
+    await pumpUi(tester);
+    await tester.tap(find.byKey(const Key('new-item-action')));
     await pumpUi(tester);
 
     expect(find.byKey(const Key('title-field')), findsOneWidget);
@@ -112,7 +114,9 @@ void main() {
   ) async {
     picker.image = _imageData('picked.png');
     await pumpApp(tester);
-    await tester.tap(find.byKey(const Key('new-item-button')));
+    await tester.tap(find.byKey(const Key('global-new-button')));
+    await pumpUi(tester);
+    await tester.tap(find.byKey(const Key('new-item-action')));
     await pumpUi(tester);
     await pressInsertImage(tester);
 
@@ -170,7 +174,9 @@ void main() {
       ..image = _imageData('clipboard.png')
       ..text = 'must not be inserted';
     await pumpApp(tester);
-    await tester.tap(find.byKey(const Key('new-item-button')));
+    await tester.tap(find.byKey(const Key('global-new-button')));
+    await pumpUi(tester);
+    await tester.tap(find.byKey(const Key('new-item-action')));
     await pumpUi(tester);
 
     await pasteShortcut(tester);
@@ -196,7 +202,9 @@ void main() {
   ) async {
     clipboard.text = 'pasted normally';
     await pumpApp(tester);
-    await tester.tap(find.byKey(const Key('new-item-button')));
+    await tester.tap(find.byKey(const Key('global-new-button')));
+    await pumpUi(tester);
+    await tester.tap(find.byKey(const Key('new-item-action')));
     await pumpUi(tester);
 
     await pasteShortcut(tester);
@@ -218,7 +226,9 @@ void main() {
     tester,
   ) async {
     await pumpApp(tester);
-    await tester.tap(find.byKey(const Key('new-item-button')));
+    await tester.tap(find.byKey(const Key('global-new-button')));
+    await pumpUi(tester);
+    await tester.tap(find.byKey(const Key('new-item-action')));
     await pumpUi(tester);
     final editor = tester.widget<QuillEditor>(
       find.byKey(const Key('content-field')),
@@ -254,7 +264,9 @@ void main() {
       ImportedFileData.localFile(source, fileName: 'report.pdf'),
     ];
     await pumpApp(tester);
-    await tester.tap(find.byKey(const Key('new-item-button')));
+    await tester.tap(find.byKey(const Key('global-new-button')));
+    await pumpUi(tester);
+    await tester.tap(find.byKey(const Key('new-item-action')));
     await pumpUi(tester);
 
     final button = tester.widget<IconButton>(
@@ -293,7 +305,9 @@ void main() {
     first.writeAsBytesSync([1, 2]);
     second.writeAsBytesSync([3, 4]);
     await pumpApp(tester);
-    await tester.tap(find.byKey(const Key('new-item-button')));
+    await tester.tap(find.byKey(const Key('global-new-button')));
+    await pumpUi(tester);
+    await tester.tap(find.byKey(const Key('new-item-action')));
     await pumpUi(tester);
     final dropRegion = tester.widget<AttachmentDropRegion>(
       find.byKey(const Key('full-editor-attachment-drop-region')),
@@ -339,7 +353,9 @@ void main() {
       ImportedFileData.localFile(source, fileName: 'remove-me.pdf'),
     ];
     await pumpApp(tester);
-    await tester.tap(find.byKey(const Key('new-item-button')));
+    await tester.tap(find.byKey(const Key('global-new-button')));
+    await pumpUi(tester);
+    await tester.tap(find.byKey(const Key('new-item-action')));
     await pumpUi(tester);
     final attachButton = tester.widget<IconButton>(
       find.byKey(const Key('attach-file-button')),
@@ -391,7 +407,9 @@ void main() {
       ImportedFileData.localFile(source, fileName: 'keep-me.pdf'),
     ];
     await pumpApp(tester);
-    await tester.tap(find.byKey(const Key('new-item-button')));
+    await tester.tap(find.byKey(const Key('global-new-button')));
+    await pumpUi(tester);
+    await tester.tap(find.byKey(const Key('new-item-action')));
     await pumpUi(tester);
     final attachButton = tester.widget<IconButton>(
       find.byKey(const Key('attach-file-button')),
