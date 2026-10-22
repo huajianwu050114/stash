@@ -52,8 +52,8 @@ try {
         "Version: $productVersion"
         "Profile: $profileLabel"
         "Entrypoint: $Target"
-        "Branch: $branch"
-        "Commit: $commit"
+        "Git Branch: $branch"
+        "Git Commit: $commit"
         "Built at: $builtAt"
     ) -join [Environment]::NewLine
     [System.IO.File]::WriteAllText(

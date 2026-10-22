@@ -11,17 +11,17 @@
 #endif
 
 #ifndef InstallerBaseName
-  #define InstallerBaseName "StashSetup-0.5.0-alpha"
+  #define InstallerBaseName "StashSetup-0.6.0-alpha"
 #endif
 
 [Setup]
 ; IMPORTANT: DO NOT CHANGE APPID AFTER FIRST RELEASE.
 AppId={{5886F905-BBB2-4623-9FA4-FFD70EA29AAE}
 AppName=Stash
-AppVersion=0.5.0 Alpha
-AppVerName=Stash 0.5.0 Alpha
+AppVersion=0.6.0 Alpha
+AppVerName=Stash 0.6.0 Alpha
 AppPublisher=Stash Project
-VersionInfoVersion=0.5.0.1
+VersionInfoVersion=0.6.0.2
 DefaultDirName={localappdata}\Programs\Stash
 DefaultGroupName=Stash
 DisableDirPage=no

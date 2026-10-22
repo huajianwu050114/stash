@@ -7,10 +7,10 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $stableBundle = Join-Path $repoRoot 'dist\stable'
 $installerOutput = Join-Path $repoRoot 'dist\installer'
-$installerName = 'StashSetup-0.5.0-alpha.exe'
+$installerName = 'StashSetup-0.6.0-alpha.exe'
 $installerPath = Join-Path $installerOutput $installerName
 $installerBuildInfo = Join-Path $installerOutput 'BUILD_INFO.txt'
-$expectedVersion = '0.5.0+1'
+$expectedVersion = '0.6.0+2'
 
 function Get-InnoSetupCompiler {
     if ($env:ISCC_PATH) {
@@ -135,7 +135,7 @@ Install it with "winget install --id JRSoftware.InnoSetup --exact" or download i
     $metadata = @(
         'Product: Stash'
         'Channel: Personal Alpha'
-        'Version: 0.5.0'
+        'Version: 0.6.0'
         'Profile: STABLE'
         "Git Branch: $branch"
         "Git Commit: $commit"
