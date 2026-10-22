@@ -21,6 +21,7 @@ import '../../attachments/presentation/stash_image_embed_builder.dart';
 import '../../items/data/item_document_codec.dart';
 import '../application/quick_stash_controller.dart';
 import '../domain/quick_stash_settings.dart';
+import 'quick_stash_location_picker.dart';
 
 class QuickStashScreen extends ConsumerStatefulWidget {
   const QuickStashScreen({super.key});
@@ -50,7 +51,11 @@ class _QuickStashScreenState extends ConsumerState<QuickStashScreen> {
   bool _saving = false;
   bool _discarding = false;
   bool _focusRestoreScheduled = false;
+  bool _locationPickerOpen = false;
   late int _activationGeneration;
+  String? _selectedChannelId;
+  String _selectedLocationLabel = '收件箱';
+  QuickStashLocationPickerController? _locationPickerController;
   String? _message;
 
   @override
@@ -75,6 +80,8 @@ class _QuickStashScreenState extends ConsumerState<QuickStashScreen> {
 
   void _startBlankSession() {
     _itemId = _uuid.v4();
+    _selectedChannelId = null;
+    _selectedLocationLabel = '收件箱';
     _lastValidSelection = const TextSelection.collapsed(offset: 0);
     final document = _codec.fromPlainText('');
     _documentController = QuillController(
@@ -137,9 +144,46 @@ class _QuickStashScreenState extends ConsumerState<QuickStashScreen> {
       _message = null;
     });
     try {
-      await ref
-          .read(itemRepositoryProvider)
-          .createItem(id: _itemId, document: snapshot, channelId: null);
+      var targetChannelId = _selectedChannelId;
+      if (targetChannelId != null) {
+        final channel = await ref
+            .read(channelRepositoryProvider)
+            .getChannelById(targetChannelId);
+        if (channel == null || channel.isDeleted) {
+          targetChannelId = null;
+          if (mounted) {
+            setState(() {
+              _selectedChannelId = null;
+              _selectedLocationLabel = '收件箱';
+            });
+          }
+        }
+      }
+      final items = ref.read(itemRepositoryProvider);
+      try {
+        await items.createItem(
+          id: _itemId,
+          document: snapshot,
+          channelId: targetChannelId,
+        );
+      } catch (_) {
+        if (targetChannelId == null) rethrow;
+        final channel = await ref
+            .read(channelRepositoryProvider)
+            .getChannelById(targetChannelId);
+        if (channel != null && !channel.isDeleted) rethrow;
+        if (mounted) {
+          setState(() {
+            _selectedChannelId = null;
+            _selectedLocationLabel = '收件箱';
+          });
+        }
+        await items.createItem(
+          id: _itemId,
+          document: snapshot,
+          channelId: null,
+        );
+      }
       final unused = _sessionAttachmentIds.difference(snapshot.attachmentIds);
       if (unused.isNotEmpty) {
         try {
@@ -406,12 +450,68 @@ class _QuickStashScreenState extends ConsumerState<QuickStashScreen> {
   }
 
   bool _handleGlobalKey(KeyEvent event) {
-    if (event is KeyDownEvent &&
-        event.logicalKey == LogicalKeyboardKey.escape) {
+    if (event is! KeyDownEvent) return false;
+    final keyboard = HardwareKeyboard.instance;
+    if (_locationPickerOpen) {
+      final controller = _locationPickerController;
+      if (controller?.isCreatingChannel ?? false) return false;
+      if (event.logicalKey == LogicalKeyboardKey.escape) {
+        controller?.close();
+        return true;
+      }
+      if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+        controller?.moveUp();
+        return true;
+      }
+      if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+        controller?.moveDown();
+        return true;
+      }
+      if (event.logicalKey == LogicalKeyboardKey.enter ||
+          event.logicalKey == LogicalKeyboardKey.numpadEnter) {
+        controller?.select();
+        return true;
+      }
+      return false;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.keyK &&
+        (keyboard.isControlPressed || keyboard.isMetaPressed)) {
+      _afterCurrentKey(_openLocationPicker);
+      return true;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.escape) {
       _afterCurrentKey(_discardAndHide);
       return true;
     }
     return false;
+  }
+
+  Future<void> _openLocationPicker() async {
+    if (_locationPickerOpen || _saving || _discarding) return;
+    final caret = _clampSelection(_documentController.selection);
+    final controller = QuickStashLocationPickerController();
+    _locationPickerController = controller;
+    setState(() => _locationPickerOpen = true);
+    final selection = await showQuickStashLocationPicker(
+      context,
+      controller: controller,
+      currentChannelId: _selectedChannelId,
+    );
+    controller.detach();
+    if (!mounted) return;
+    setState(() {
+      _locationPickerOpen = false;
+      _locationPickerController = null;
+      if (selection != null) {
+        _selectedChannelId = selection.channelId;
+        _selectedLocationLabel = selection.label;
+        _message = null;
+      }
+    });
+    _restoreEditorFocus(caret);
+    await Future<void>.delayed(const Duration(milliseconds: 320));
+    if (!mounted) return;
+    _restoreEditorFocus(caret);
   }
 
   KeyEventResult _handleKey(KeyEvent event, QuickCaptureSubmitMode submitMode) {
@@ -583,11 +683,54 @@ class _QuickStashScreenState extends ConsumerState<QuickStashScreen> {
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
                       ),
-                      const Icon(Icons.inbox_outlined, size: 18),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Inbox',
-                        style: Theme.of(context).textTheme.bodySmall,
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 200),
+                        child: Tooltip(
+                          message: _selectedLocationLabel,
+                          child: TextButton(
+                            key: const Key('quick-location-button'),
+                            onPressed: _saving || _discarding
+                                ? null
+                                : _openLocationPicker,
+                            style: TextButton.styleFrom(
+                              minimumSize: const Size(0, 34),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                              ),
+                              foregroundColor: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant,
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  _selectedChannelId == null
+                                      ? Icons.inbox_outlined
+                                      : Icons.folder_outlined,
+                                  size: 17,
+                                ),
+                                const SizedBox(width: 6),
+                                Flexible(
+                                  child: Text(
+                                    _selectedLocationLabel,
+                                    key: const Key('quick-location-label'),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodySmall,
+                                  ),
+                                ),
+                                const SizedBox(width: 2),
+                                const Icon(
+                                  Icons.arrow_drop_down_rounded,
+                                  size: 18,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                       ),
                       const SizedBox(width: 8),
                       IconButton.filledTonal(
