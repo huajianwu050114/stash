@@ -15,7 +15,10 @@ import 'package:stash/features/attachments/data/file_attachment_ingestor.dart';
 import 'package:stash/features/attachments/data/file_import_sources.dart';
 import 'package:stash/features/attachments/data/image_import_sources.dart';
 import 'package:stash/features/attachments/presentation/attachment_drop_region.dart';
+import 'package:stash/features/channels/data/channel_repository.dart';
 import 'package:stash/features/items/data/item_document_codec.dart';
+import 'package:stash/features/items/data/item_repository.dart';
+import 'package:stash/features/items/domain/item.dart';
 import 'package:stash/features/quick_stash/application/quick_stash_controller.dart';
 import 'package:stash/features/quick_stash/application/quick_stash_settings_controller.dart';
 import 'package:stash/features/quick_stash/data/quick_stash_settings_repository.dart';
@@ -56,15 +59,36 @@ void main() {
     clipboard = _FakeClipboard();
   });
 
-  Future<void> pumpApp(WidgetTester tester) async {
+  Future<void> pumpApp(
+    WidgetTester tester, {
+    ItemRepository? itemRepository,
+  }) async {
+    final container = ProviderContainer(
+      overrides: [
+        databaseProvider.overrideWithValue(db),
+        if (itemRepository != null)
+          itemRepositoryProvider.overrideWithValue(itemRepository),
+        attachmentRepositoryProvider.overrideWithValue(attachments),
+        imagePickerProvider.overrideWithValue(picker),
+        filePickerProvider.overrideWithValue(filePicker),
+        clipboardReaderProvider.overrideWithValue(clipboard),
+        quickStashControllerProvider.overrideWithValue(quickStash),
+        quickStashSettingsControllerProvider.overrideWithValue(settings),
+        appearanceRepositoryProvider.overrideWithValue(
+          AppearanceRepository(_MemoryAppearancePreferences()),
+        ),
+      ],
+    );
     addTearDown(() async {
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump(Duration.zero);
       await tester.pump(Duration.zero);
+      container.dispose();
+      await tester.pump(Duration.zero);
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(milliseconds: 25)),
       );
-      await tester.pump(Duration.zero);
+      await tester.pump(const Duration(milliseconds: 100));
       await db.close();
       PaintingBinding.instance.imageCache
         ..clear()
@@ -74,21 +98,7 @@ void main() {
       }
     });
     await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          databaseProvider.overrideWithValue(db),
-          attachmentRepositoryProvider.overrideWithValue(attachments),
-          imagePickerProvider.overrideWithValue(picker),
-          filePickerProvider.overrideWithValue(filePicker),
-          clipboardReaderProvider.overrideWithValue(clipboard),
-          quickStashControllerProvider.overrideWithValue(quickStash),
-          quickStashSettingsControllerProvider.overrideWithValue(settings),
-          appearanceRepositoryProvider.overrideWithValue(
-            AppearanceRepository(_MemoryAppearancePreferences()),
-          ),
-        ],
-        child: const StashApp(),
-      ),
+      UncontrolledProviderScope(container: container, child: const StashApp()),
     );
     await pumpUi(tester);
     expect(find.byKey(const Key('quick-content-field')), findsOneWidget);
@@ -112,6 +122,213 @@ void main() {
     expect(items.single.channelId, isNull);
     expect(window.hideCalls, 1);
     expect(quickDocument(tester).toPlainText(), '\n');
+  });
+
+  testWidgets('new session defaults to Inbox and saves there untouched', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('quick-location-button')),
+        matching: find.text('收件箱'),
+      ),
+      findsOneWidget,
+    );
+    enterQuickText(tester, 'zero friction');
+    await pressKey(tester, LogicalKeyboardKey.enter);
+
+    expect((await db.select(db.items).getSingle()).channelId, isNull);
+  });
+
+  testWidgets('root Channel is selected and written during Item creation', (
+    tester,
+  ) async {
+    final channel = await ChannelRepository(db).createRootChannel(name: '项目');
+    await pumpApp(tester);
+
+    await selectQuickLocation(tester, channel.id);
+    enterQuickText(tester, 'direct route');
+    await pressKey(tester, LogicalKeyboardKey.enter);
+
+    expect((await db.select(db.items).getSingle()).channelId, channel.id);
+  });
+
+  testWidgets('nested Channel uses its breadcrumb and receives the Item', (
+    tester,
+  ) async {
+    final channels = ChannelRepository(db);
+    final root = await channels.createRootChannel(name: '学习');
+    final child = await channels.createChildChannel(
+      name: '论文',
+      parentId: root.id,
+    );
+    await pumpApp(tester);
+
+    await openQuickLocationPicker(tester);
+    expect(find.text('学习 / 论文'), findsOneWidget);
+    await tester.tap(find.byKey(Key('quick-location-${child.id}')));
+    await pumpUi(tester);
+    expect(find.text('学习 / 论文'), findsOneWidget);
+    enterQuickText(tester, 'nested route');
+    await pressKey(tester, LogicalKeyboardKey.enter);
+
+    expect((await db.select(db.items).getSingle()).channelId, child.id);
+  });
+
+  testWidgets('destination resets to Inbox after save and discard', (
+    tester,
+  ) async {
+    final channel = await ChannelRepository(db).createRootChannel(name: '临时');
+    await pumpApp(tester);
+
+    await selectQuickLocation(tester, channel.id);
+    enterQuickText(tester, 'save me');
+    await pressKey(tester, LogicalKeyboardKey.enter);
+    expect(find.text('收件箱'), findsOneWidget);
+
+    await quickStash.showQuick();
+    await pumpUi(tester);
+    await selectQuickLocation(tester, channel.id);
+    enterQuickText(tester, 'discard me');
+    await tester.tap(find.byKey(const Key('quick-close')));
+    await pumpUi(tester);
+    expect(find.text('收件箱'), findsOneWidget);
+  });
+
+  testWidgets('picker search matches breadcrumb and keeps Inbox available', (
+    tester,
+  ) async {
+    final channels = ChannelRepository(db);
+    final root = await channels.createRootChannel(name: '学习');
+    final paper = await channels.createChildChannel(
+      name: '论文',
+      parentId: root.id,
+    );
+    final memes = await channels.createRootChannel(name: '表情包');
+    await pumpApp(tester);
+    await openQuickLocationPicker(tester);
+
+    await tester.enterText(
+      find.byKey(const Key('quick-location-search')),
+      '学习 / 论文',
+    );
+    await tester.pump();
+
+    expect(find.byKey(Key('quick-location-${paper.id}')), findsOneWidget);
+    expect(find.byKey(Key('quick-location-${memes.id}')), findsNothing);
+    expect(find.byKey(const Key('quick-location-inbox')), findsOneWidget);
+    await pressKey(tester, LogicalKeyboardKey.escape);
+  });
+
+  testWidgets(
+    'Ctrl+K keyboard selection does not submit and restores focus and caret',
+    (tester) async {
+      final channel = await ChannelRepository(db)
+          .createRootChannel(name: 'Alpha');
+      await pumpApp(tester);
+      enterQuickText(tester, 'draft');
+      final editor = quickEditor(tester);
+      editor.controller.updateSelection(
+        const TextSelection.collapsed(offset: 2),
+        ChangeSource.local,
+      );
+
+      await pressKey(tester, LogicalKeyboardKey.keyK, control: true);
+      expect(find.byKey(const Key('quick-location-picker')), findsOneWidget);
+      await pressKey(tester, LogicalKeyboardKey.arrowDown);
+      await pressKey(tester, LogicalKeyboardKey.enter);
+
+      expect(find.byKey(const Key('quick-location-picker')), findsNothing);
+      expect(await db.select(db.items).get(), isEmpty);
+      expect(window.hideCalls, 0);
+      expect(find.text('Alpha'), findsOneWidget);
+      expect(editor.focusNode.hasFocus, isTrue);
+      expect(
+        editor.controller.selection,
+        const TextSelection.collapsed(offset: 2),
+      );
+
+      await pressKey(tester, LogicalKeyboardKey.enter);
+      expect((await db.select(db.items).getSingle()).channelId, channel.id);
+    },
+  );
+
+  testWidgets('picker Escape closes only picker; next Escape discards', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    enterQuickText(tester, 'keep while picker closes');
+
+    await pressKey(tester, LogicalKeyboardKey.keyK, control: true);
+    await pressKey(tester, LogicalKeyboardKey.escape);
+
+    expect(find.byKey(const Key('quick-location-picker')), findsNothing);
+    expect(window.hideCalls, 0);
+    expect(quickDocument(tester).toPlainText(), 'keep while picker closes\n');
+    expect(quickEditor(tester).focusNode.hasFocus, isTrue);
+
+    await pressKey(tester, LogicalKeyboardKey.escape);
+    expect(window.hideCalls, 1);
+  });
+
+  testWidgets('picker creates a root Channel and selects it', (tester) async {
+    await pumpApp(tester);
+    await openQuickLocationPicker(tester);
+
+    await tester.tap(find.byKey(const Key('quick-create-channel')));
+    await pumpUi(tester);
+    await tester.enterText(
+      find.byKey(const Key('quick-channel-name-field')),
+      '旅行',
+    );
+    await tester.tap(find.byKey(const Key('quick-save-channel')));
+    await pumpUi(tester);
+
+    final channel = (await ChannelRepository(db).getActiveChannels()).single;
+    expect(channel.name, '旅行');
+    expect(channel.parentId, isNull);
+    expect(find.text('旅行'), findsOneWidget);
+    expect(quickEditor(tester).focusNode.hasFocus, isTrue);
+    enterQuickText(tester, 'new destination');
+    await pressKey(tester, LogicalKeyboardKey.enter);
+    expect((await db.select(db.items).getSingle()).channelId, channel.id);
+  });
+
+  testWidgets('deleted destination falls back safely to Inbox', (tester) async {
+    final channels = ChannelRepository(db);
+    final channel = await channels.createRootChannel(name: '短期');
+    await pumpApp(tester);
+    await selectQuickLocation(tester, channel.id);
+    await channels.softDeleteChannel(channel.id);
+    enterQuickText(tester, 'still save this');
+
+    await pressKey(tester, LogicalKeyboardKey.enter);
+
+    expect((await db.select(db.items).getSingle()).channelId, isNull);
+    await quickStash.showQuick();
+    await pumpUi(tester);
+    await openQuickLocationPicker(tester);
+    expect(find.byKey(Key('quick-location-${channel.id}')), findsNothing);
+    await pressKey(tester, LogicalKeyboardKey.escape);
+  });
+
+  testWidgets('save failure preserves content and selected destination', (
+    tester,
+  ) async {
+    final channel = await ChannelRepository(db).createRootChannel(name: '可靠');
+    await pumpApp(tester, itemRepository: _FailingItemRepository(db));
+    await selectQuickLocation(tester, channel.id);
+    enterQuickText(tester, 'retry later');
+
+    await pressKey(tester, LogicalKeyboardKey.enter);
+
+    expect(await db.select(db.items).get(), isEmpty);
+    expect(window.hideCalls, 0);
+    expect(quickDocument(tester).toPlainText(), 'retry later\n');
+    expect(find.text('可靠'), findsOneWidget);
+    expect(find.text('Could not save this item.'), findsOneWidget);
   });
 
   testWidgets('Shift+Enter inserts newline without creating an item', (
@@ -158,6 +375,20 @@ void main() {
     expect(window.hideCalls, 1);
   });
 
+  testWidgets('image-only capture saves directly to a Channel', (tester) async {
+    final channel = await ChannelRepository(db).createRootChannel(name: '图片');
+    picker.image = imageData('direct.png');
+    await pumpApp(tester);
+    await selectQuickLocation(tester, channel.id);
+    await tapInsertImage(tester);
+
+    await pressKey(tester, LogicalKeyboardKey.enter);
+
+    final item = await db.select(db.items).getSingle();
+    expect(item.channelId, channel.id);
+    expect(item.documentJson, contains('stash-image'));
+  });
+
   testWidgets('dropped PDF plus Enter saves a file-only Inbox item', (
     tester,
   ) async {
@@ -185,6 +416,68 @@ void main() {
     expect(item.content, isEmpty);
     expect(item.documentJson, contains(attachment.id));
     expect(window.hideCalls, 1);
+  });
+
+  testWidgets('PDF-only capture saves directly to a Channel', (tester) async {
+    final channel = await ChannelRepository(db).createRootChannel(name: '论文');
+    final source = File(
+      '${supportDirectory.path}${Platform.pathSeparator}direct-paper.pdf',
+    );
+    source.writeAsBytesSync([1, 2, 3]);
+    await pumpApp(tester);
+    await selectQuickLocation(tester, channel.id);
+    final dropRegion = tester.widget<AttachmentDropRegion>(
+      find.byKey(const Key('quick-attachment-drop-region')),
+    );
+    await tester.runAsync(
+      () => dropRegion.onFilesDropped([
+        ImportedFileData.localFile(source, fileName: 'direct-paper.pdf'),
+      ]),
+    );
+    await pumpUi(tester);
+
+    await pressKey(tester, LogicalKeyboardKey.enter);
+
+    final item = await db.select(db.items).getSingle();
+    expect(item.channelId, channel.id);
+    expect(item.documentJson, contains('stash-file'));
+  });
+
+  testWidgets('mixed text, image, and file capture keeps direct routing', (
+    tester,
+  ) async {
+    final channel = await ChannelRepository(db).createRootChannel(name: '项目');
+    final source = File(
+      '${supportDirectory.path}${Platform.pathSeparator}archive.zip',
+    );
+    source.writeAsBytesSync([4, 5, 6]);
+    picker.image = imageData('diagram.png');
+    await pumpApp(tester);
+    await selectQuickLocation(tester, channel.id);
+    enterQuickText(tester, 'supporting material');
+    await tapInsertImage(tester);
+    final dropRegion = tester.widget<AttachmentDropRegion>(
+      find.byKey(const Key('quick-attachment-drop-region')),
+    );
+    await tester.runAsync(
+      () => dropRegion.onFilesDropped([
+        ImportedFileData.localFile(source, fileName: 'archive.zip'),
+      ]),
+    );
+    await pumpUi(tester);
+
+    await pressKey(tester, LogicalKeyboardKey.enter);
+
+    final item = await db.select(db.items).getSingle();
+    expect(item.channelId, channel.id);
+    expect(item.content, 'supporting material');
+    final document = const ItemDocumentCodec().decode(
+      documentJson: item.documentJson,
+      legacyText: item.content,
+    );
+    final snapshot = const ItemDocumentCodec().snapshot(document);
+    expect(snapshot.imageAttachmentIds, hasLength(1));
+    expect(snapshot.fileAttachmentIds, hasLength(1));
   });
 
   testWidgets('multiple dropped files keep focus and coexist with text', (
@@ -564,13 +857,17 @@ void main() {
   testWidgets('Expand auto-saves a meaningful draft then shows Full Stash', (
     tester,
   ) async {
+    final channel = await ChannelRepository(db).createRootChannel(name: '展开目标');
     await pumpApp(tester);
+    await selectQuickLocation(tester, channel.id);
     enterQuickText(tester, 'keep this draft');
 
     await tester.tap(find.byKey(const Key('quick-expand')));
     await pumpUi(tester);
 
-    expect((await db.select(db.items).get()).single.content, 'keep this draft');
+    final item = (await db.select(db.items).get()).single;
+    expect(item.content, 'keep this draft');
+    expect(item.channelId, channel.id);
     expect(quickStash.surface, StashSurface.full);
     expect(window.showFullCalls, 1);
     expect(find.byKey(const Key('root-browser')), findsOneWidget);
@@ -578,6 +875,19 @@ void main() {
     await tester.pump(Duration.zero);
     await tester.pump(Duration.zero);
   });
+}
+
+Future<void> openQuickLocationPicker(WidgetTester tester) async {
+  await tester.tap(find.byKey(const Key('quick-location-button')));
+  await pumpUi(tester);
+  expect(find.byKey(const Key('quick-location-picker')), findsOneWidget);
+}
+
+Future<void> selectQuickLocation(WidgetTester tester, String channelId) async {
+  await openQuickLocationPicker(tester);
+  await tester.tap(find.byKey(Key('quick-location-$channelId')));
+  await pumpUi(tester);
+  expect(find.byKey(const Key('quick-location-picker')), findsNothing);
 }
 
 void enterQuickText(WidgetTester tester, String text) {
@@ -845,4 +1155,20 @@ class _MemoryAppearancePreferences implements AppearancePreferences {
 
   @override
   Future<void> setString(String key, String value) async {}
+}
+
+class _FailingItemRepository extends ItemRepository {
+  _FailingItemRepository(super.database);
+
+  @override
+  Future<Item> createItem({
+    String? id,
+    String? title,
+    String content = '',
+    String? note,
+    List<String> tags = const [],
+    bool isPinned = false,
+    String? channelId,
+    ItemDocumentSnapshot? document,
+  }) => Future<Item>.error(StateError('simulated save failure'));
 }
