@@ -1260,6 +1260,15 @@ class $AttachmentsTable extends Attachments
     type: DriftSqlType.int,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _sha256Meta = const VerificationMeta('sha256');
+  @override
+  late final GeneratedColumn<String> sha256 = GeneratedColumn<String>(
+    'sha256',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -1302,6 +1311,7 @@ class $AttachmentsTable extends Attachments
     originalFileName,
     relativePath,
     byteSize,
+    sha256,
     createdAt,
     deletedAt,
     serverRevision,
@@ -1365,6 +1375,12 @@ class $AttachmentsTable extends Attachments
         byteSize.isAcceptableOrUnknown(data['byte_size']!, _byteSizeMeta),
       );
     }
+    if (data.containsKey('sha256')) {
+      context.handle(
+        _sha256Meta,
+        sha256.isAcceptableOrUnknown(data['sha256']!, _sha256Meta),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -1421,6 +1437,10 @@ class $AttachmentsTable extends Attachments
         DriftSqlType.int,
         data['${effectivePrefix}byte_size'],
       ),
+      sha256: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sha256'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -1452,6 +1472,9 @@ class AttachmentRecord extends DataClass
   /// Path relative to the app-managed support directory.
   final String relativePath;
   final int? byteSize;
+
+  /// Portable SHA-256 of the managed blob, computed lazily for older data.
+  final String? sha256;
   final DateTime createdAt;
   final DateTime? deletedAt;
 
@@ -1464,6 +1487,7 @@ class AttachmentRecord extends DataClass
     this.originalFileName,
     required this.relativePath,
     this.byteSize,
+    this.sha256,
     required this.createdAt,
     this.deletedAt,
     required this.serverRevision,
@@ -1480,6 +1504,9 @@ class AttachmentRecord extends DataClass
     map['relative_path'] = Variable<String>(relativePath);
     if (!nullToAbsent || byteSize != null) {
       map['byte_size'] = Variable<int>(byteSize);
+    }
+    if (!nullToAbsent || sha256 != null) {
+      map['sha256'] = Variable<String>(sha256);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     if (!nullToAbsent || deletedAt != null) {
@@ -1501,6 +1528,9 @@ class AttachmentRecord extends DataClass
       byteSize: byteSize == null && nullToAbsent
           ? const Value.absent()
           : Value(byteSize),
+      sha256: sha256 == null && nullToAbsent
+          ? const Value.absent()
+          : Value(sha256),
       createdAt: Value(createdAt),
       deletedAt: deletedAt == null && nullToAbsent
           ? const Value.absent()
@@ -1521,6 +1551,7 @@ class AttachmentRecord extends DataClass
       originalFileName: serializer.fromJson<String?>(json['originalFileName']),
       relativePath: serializer.fromJson<String>(json['relativePath']),
       byteSize: serializer.fromJson<int?>(json['byteSize']),
+      sha256: serializer.fromJson<String?>(json['sha256']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
       serverRevision: serializer.fromJson<int>(json['serverRevision']),
@@ -1536,6 +1567,7 @@ class AttachmentRecord extends DataClass
       'originalFileName': serializer.toJson<String?>(originalFileName),
       'relativePath': serializer.toJson<String>(relativePath),
       'byteSize': serializer.toJson<int?>(byteSize),
+      'sha256': serializer.toJson<String?>(sha256),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'deletedAt': serializer.toJson<DateTime?>(deletedAt),
       'serverRevision': serializer.toJson<int>(serverRevision),
@@ -1549,6 +1581,7 @@ class AttachmentRecord extends DataClass
     Value<String?> originalFileName = const Value.absent(),
     String? relativePath,
     Value<int?> byteSize = const Value.absent(),
+    Value<String?> sha256 = const Value.absent(),
     DateTime? createdAt,
     Value<DateTime?> deletedAt = const Value.absent(),
     int? serverRevision,
@@ -1561,6 +1594,7 @@ class AttachmentRecord extends DataClass
         : this.originalFileName,
     relativePath: relativePath ?? this.relativePath,
     byteSize: byteSize.present ? byteSize.value : this.byteSize,
+    sha256: sha256.present ? sha256.value : this.sha256,
     createdAt: createdAt ?? this.createdAt,
     deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
     serverRevision: serverRevision ?? this.serverRevision,
@@ -1577,6 +1611,7 @@ class AttachmentRecord extends DataClass
           ? data.relativePath.value
           : this.relativePath,
       byteSize: data.byteSize.present ? data.byteSize.value : this.byteSize,
+      sha256: data.sha256.present ? data.sha256.value : this.sha256,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
       serverRevision: data.serverRevision.present
@@ -1594,6 +1629,7 @@ class AttachmentRecord extends DataClass
           ..write('originalFileName: $originalFileName, ')
           ..write('relativePath: $relativePath, ')
           ..write('byteSize: $byteSize, ')
+          ..write('sha256: $sha256, ')
           ..write('createdAt: $createdAt, ')
           ..write('deletedAt: $deletedAt, ')
           ..write('serverRevision: $serverRevision')
@@ -1609,6 +1645,7 @@ class AttachmentRecord extends DataClass
     originalFileName,
     relativePath,
     byteSize,
+    sha256,
     createdAt,
     deletedAt,
     serverRevision,
@@ -1623,6 +1660,7 @@ class AttachmentRecord extends DataClass
           other.originalFileName == this.originalFileName &&
           other.relativePath == this.relativePath &&
           other.byteSize == this.byteSize &&
+          other.sha256 == this.sha256 &&
           other.createdAt == this.createdAt &&
           other.deletedAt == this.deletedAt &&
           other.serverRevision == this.serverRevision);
@@ -1635,6 +1673,7 @@ class AttachmentsCompanion extends UpdateCompanion<AttachmentRecord> {
   final Value<String?> originalFileName;
   final Value<String> relativePath;
   final Value<int?> byteSize;
+  final Value<String?> sha256;
   final Value<DateTime> createdAt;
   final Value<DateTime?> deletedAt;
   final Value<int> serverRevision;
@@ -1646,6 +1685,7 @@ class AttachmentsCompanion extends UpdateCompanion<AttachmentRecord> {
     this.originalFileName = const Value.absent(),
     this.relativePath = const Value.absent(),
     this.byteSize = const Value.absent(),
+    this.sha256 = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
     this.serverRevision = const Value.absent(),
@@ -1658,6 +1698,7 @@ class AttachmentsCompanion extends UpdateCompanion<AttachmentRecord> {
     this.originalFileName = const Value.absent(),
     required String relativePath,
     this.byteSize = const Value.absent(),
+    this.sha256 = const Value.absent(),
     required DateTime createdAt,
     this.deletedAt = const Value.absent(),
     this.serverRevision = const Value.absent(),
@@ -1674,6 +1715,7 @@ class AttachmentsCompanion extends UpdateCompanion<AttachmentRecord> {
     Expression<String>? originalFileName,
     Expression<String>? relativePath,
     Expression<int>? byteSize,
+    Expression<String>? sha256,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? deletedAt,
     Expression<int>? serverRevision,
@@ -1686,6 +1728,7 @@ class AttachmentsCompanion extends UpdateCompanion<AttachmentRecord> {
       if (originalFileName != null) 'original_file_name': originalFileName,
       if (relativePath != null) 'relative_path': relativePath,
       if (byteSize != null) 'byte_size': byteSize,
+      if (sha256 != null) 'sha256': sha256,
       if (createdAt != null) 'created_at': createdAt,
       if (deletedAt != null) 'deleted_at': deletedAt,
       if (serverRevision != null) 'server_revision': serverRevision,
@@ -1700,6 +1743,7 @@ class AttachmentsCompanion extends UpdateCompanion<AttachmentRecord> {
     Value<String?>? originalFileName,
     Value<String>? relativePath,
     Value<int?>? byteSize,
+    Value<String?>? sha256,
     Value<DateTime>? createdAt,
     Value<DateTime?>? deletedAt,
     Value<int>? serverRevision,
@@ -1712,6 +1756,7 @@ class AttachmentsCompanion extends UpdateCompanion<AttachmentRecord> {
       originalFileName: originalFileName ?? this.originalFileName,
       relativePath: relativePath ?? this.relativePath,
       byteSize: byteSize ?? this.byteSize,
+      sha256: sha256 ?? this.sha256,
       createdAt: createdAt ?? this.createdAt,
       deletedAt: deletedAt ?? this.deletedAt,
       serverRevision: serverRevision ?? this.serverRevision,
@@ -1740,6 +1785,9 @@ class AttachmentsCompanion extends UpdateCompanion<AttachmentRecord> {
     if (byteSize.present) {
       map['byte_size'] = Variable<int>(byteSize.value);
     }
+    if (sha256.present) {
+      map['sha256'] = Variable<String>(sha256.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -1764,6 +1812,7 @@ class AttachmentsCompanion extends UpdateCompanion<AttachmentRecord> {
           ..write('originalFileName: $originalFileName, ')
           ..write('relativePath: $relativePath, ')
           ..write('byteSize: $byteSize, ')
+          ..write('sha256: $sha256, ')
           ..write('createdAt: $createdAt, ')
           ..write('deletedAt: $deletedAt, ')
           ..write('serverRevision: $serverRevision, ')
@@ -3180,6 +3229,7 @@ typedef $$AttachmentsTableCreateCompanionBuilder =
       Value<String?> originalFileName,
       required String relativePath,
       Value<int?> byteSize,
+      Value<String?> sha256,
       required DateTime createdAt,
       Value<DateTime?> deletedAt,
       Value<int> serverRevision,
@@ -3193,6 +3243,7 @@ typedef $$AttachmentsTableUpdateCompanionBuilder =
       Value<String?> originalFileName,
       Value<String> relativePath,
       Value<int?> byteSize,
+      Value<String?> sha256,
       Value<DateTime> createdAt,
       Value<DateTime?> deletedAt,
       Value<int> serverRevision,
@@ -3235,6 +3286,11 @@ class $$AttachmentsTableFilterComposer
 
   ColumnFilters<int> get byteSize => $composableBuilder(
     column: $table.byteSize,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sha256 => $composableBuilder(
+    column: $table.sha256,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -3293,6 +3349,11 @@ class $$AttachmentsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get sha256 => $composableBuilder(
+    column: $table.sha256,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -3339,6 +3400,9 @@ class $$AttachmentsTableAnnotationComposer
 
   GeneratedColumn<int> get byteSize =>
       $composableBuilder(column: $table.byteSize, builder: (column) => column);
+
+  GeneratedColumn<String> get sha256 =>
+      $composableBuilder(column: $table.sha256, builder: (column) => column);
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -3389,6 +3453,7 @@ class $$AttachmentsTableTableManager
                 Value<String?> originalFileName = const Value.absent(),
                 Value<String> relativePath = const Value.absent(),
                 Value<int?> byteSize = const Value.absent(),
+                Value<String?> sha256 = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
                 Value<int> serverRevision = const Value.absent(),
@@ -3400,6 +3465,7 @@ class $$AttachmentsTableTableManager
                 originalFileName: originalFileName,
                 relativePath: relativePath,
                 byteSize: byteSize,
+                sha256: sha256,
                 createdAt: createdAt,
                 deletedAt: deletedAt,
                 serverRevision: serverRevision,
@@ -3413,6 +3479,7 @@ class $$AttachmentsTableTableManager
                 Value<String?> originalFileName = const Value.absent(),
                 required String relativePath,
                 Value<int?> byteSize = const Value.absent(),
+                Value<String?> sha256 = const Value.absent(),
                 required DateTime createdAt,
                 Value<DateTime?> deletedAt = const Value.absent(),
                 Value<int> serverRevision = const Value.absent(),
@@ -3424,6 +3491,7 @@ class $$AttachmentsTableTableManager
                 originalFileName: originalFileName,
                 relativePath: relativePath,
                 byteSize: byteSize,
+                sha256: sha256,
                 createdAt: createdAt,
                 deletedAt: deletedAt,
                 serverRevision: serverRevision,

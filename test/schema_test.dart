@@ -48,6 +48,7 @@ void main() {
       'original_file_name',
       'relative_path',
       'byte_size',
+      'sha256',
       'created_at',
       'deleted_at',
       'server_revision',
@@ -80,10 +81,10 @@ void main() {
     return result;
   }
 
-  test('database is created at schema version 4', () async {
-    expect(db.schemaVersion, 4);
+  test('database is created at schema version 5', () async {
+    expect(db.schemaVersion, 5);
     final version = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(version.data['user_version'], 4);
+    expect(version.data['user_version'], 5);
   });
 
   test(
@@ -102,7 +103,7 @@ void main() {
   );
 
   test('committed schema export matches the live schema', () async {
-    final exportFile = File('drift_schemas/drift_schema_v4.json');
+    final exportFile = File('drift_schemas/drift_schema_v5.json');
     expect(
       exportFile.existsSync(),
       isTrue,

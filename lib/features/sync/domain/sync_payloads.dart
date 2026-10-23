@@ -157,6 +157,7 @@ class AttachmentSyncPayload {
     required this.mimeType,
     required this.originalFileName,
     required this.byteSize,
+    required this.sha256,
     required this.createdAt,
     required this.deletedAt,
     required this.serverRevision,
@@ -167,6 +168,7 @@ class AttachmentSyncPayload {
   final String mimeType;
   final String? originalFileName;
   final int? byteSize;
+  final String? sha256;
   final DateTime createdAt;
   final DateTime? deletedAt;
   final int serverRevision;
@@ -177,6 +179,7 @@ class AttachmentSyncPayload {
     'mimeType': mimeType,
     'originalFileName': originalFileName,
     'byteSize': byteSize,
+    'sha256': sha256,
     'createdAt': _PayloadCodec.timestamp(createdAt),
     'deletedAt': deletedAt == null ? null : _PayloadCodec.timestamp(deletedAt!),
     'serverRevision': serverRevision,
@@ -190,6 +193,7 @@ class AttachmentSyncPayload {
     byteSize: json['byteSize'] == null
         ? null
         : _PayloadCodec.integer(json, 'byteSize'),
+    sha256: _PayloadCodec.nullableString(json, 'sha256'),
     createdAt: _PayloadCodec.dateTime(json, 'createdAt'),
     deletedAt: _PayloadCodec.nullableDateTime(json, 'deletedAt'),
     serverRevision: _PayloadCodec.integer(json, 'serverRevision'),

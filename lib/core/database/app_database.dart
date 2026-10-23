@@ -19,7 +19,7 @@ part 'app_database.g.dart';
 /// database is never recreated or dropped on upgrade.
 @DriftDatabase(tables: [Items, Channels, Attachments, SyncOutbox, SyncMeta])
 class AppDatabase extends _$AppDatabase {
-  static const currentSchemaVersion = 4;
+  static const currentSchemaVersion = 5;
 
   /// Opens the real on-device database using the best native SQLite backend
   /// available on the current platform (see `package:drift_flutter`).
@@ -87,6 +87,9 @@ class AppDatabase extends _$AppDatabase {
           FROM sync_outbox_v3
         ''');
         await customStatement('DROP TABLE sync_outbox_v3');
+      }
+      if (from < 5 && from >= 3) {
+        await m.addColumn(attachments, attachments.sha256);
       }
     },
     beforeOpen: (details) async {

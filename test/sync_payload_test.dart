@@ -56,6 +56,7 @@ void main() {
       mimeType: 'application/pdf',
       originalFileName: 'paper.pdf',
       byteSize: 42,
+      sha256: 'abc123',
       createdAt: createdAt,
       deletedAt: deletedAt,
       serverRevision: 5,
@@ -66,6 +67,7 @@ void main() {
     expect(json, isNot(contains('relativePath')));
     expect(json, isNot(contains('absolutePath')));
     expect(json, isNot(contains('blob')));
+    expect(json['sha256'], 'abc123');
     final encoded = jsonEncode(json);
     expect(encoded, isNot(contains(r'C:\')));
     expect(encoded.toLowerCase(), isNot(contains('appdata')));

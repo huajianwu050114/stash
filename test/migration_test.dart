@@ -63,7 +63,7 @@ void main() {
     final version = await db.customSelect('PRAGMA user_version').getSingle();
     expect(item.documentJson, isNull);
     expect(await db.select(db.attachments).get(), isEmpty);
-    expect(version.data['user_version'], 4);
+    expect(version.data['user_version'], 5);
     final outbox = await db.select(db.syncOutbox).getSingle();
     expect(outbox.entityType, 'item');
     expect(outbox.entityId, 'legacy');
@@ -147,7 +147,7 @@ void main() {
       expect((await db.select(db.syncMeta).getSingle()).value, '99');
       expect(await db.select(db.attachments).get(), isEmpty);
       final version = await db.customSelect('PRAGMA user_version').getSingle();
-      expect(version.data['user_version'], 4);
+      expect(version.data['user_version'], 5);
     },
   );
 
@@ -253,6 +253,111 @@ void main() {
     expect(mutation.retryCount, 2);
     expect(await db.select(db.syncOutbox).get(), hasLength(1));
     final version = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(version.data['user_version'], 4);
+    expect(version.data['user_version'], 5);
+  });
+
+  test('v4 upgrades to v5 preserving entities and generic outbox', () async {
+    final raw = sqlite3.openInMemory();
+    raw.execute('''
+      CREATE TABLE items (
+        id TEXT NOT NULL PRIMARY KEY,
+        title TEXT NULL,
+        content TEXT NOT NULL,
+        note TEXT NULL,
+        channel_id TEXT NULL,
+        document_json TEXT NULL,
+        tags TEXT NOT NULL DEFAULT '[]',
+        is_pinned INTEGER NOT NULL DEFAULT 0 CHECK (is_pinned IN (0, 1)),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT NULL,
+        server_revision INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE TABLE channels (
+        id TEXT NOT NULL PRIMARY KEY,
+        name TEXT NOT NULL,
+        parent_id TEXT NULL REFERENCES channels (id),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT NULL,
+        server_revision INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE TABLE attachments (
+        id TEXT NOT NULL PRIMARY KEY,
+        item_id TEXT NOT NULL,
+        mime_type TEXT NOT NULL,
+        original_file_name TEXT NULL,
+        relative_path TEXT NOT NULL,
+        byte_size INTEGER NULL,
+        created_at TEXT NOT NULL,
+        deleted_at TEXT NULL,
+        server_revision INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE TABLE sync_outbox (
+        entity_type TEXT NOT NULL,
+        entity_id TEXT NOT NULL,
+        mutation_id TEXT NOT NULL,
+        base_revision INTEGER NOT NULL,
+        op TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        retry_count INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (entity_type, entity_id)
+      );
+      CREATE TABLE sync_meta (
+        key TEXT NOT NULL PRIMARY KEY,
+        value TEXT NOT NULL
+      );
+      PRAGMA user_version = 4;
+    ''');
+    final timestamp = DateTime.utc(2026, 4, 5, 6, 7, 8).toIso8601String();
+    raw.execute(
+      'INSERT INTO channels '
+      '(id, name, created_at, updated_at, server_revision) '
+      'VALUES (?, ?, ?, ?, ?)',
+      ['channel-v4', 'Channel v4', timestamp, timestamp, 3],
+    );
+    raw.execute(
+      'INSERT INTO items '
+      '(id, content, channel_id, created_at, updated_at, server_revision) '
+      'VALUES (?, ?, ?, ?, ?, ?)',
+      ['item-v4', 'Item v4', 'channel-v4', timestamp, timestamp, 5],
+    );
+    raw.execute(
+      'INSERT INTO attachments '
+      '(id, item_id, mime_type, relative_path, byte_size, created_at, '
+      'server_revision) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [
+        'attachment-v4',
+        'item-v4',
+        'application/pdf',
+        'attachments/attachment-v4.pdf',
+        42,
+        timestamp,
+        2,
+      ],
+    );
+    raw.execute(
+      'INSERT INTO sync_outbox '
+      '(entity_type, entity_id, mutation_id, base_revision, op, created_at, '
+      'retry_count) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      ['item', 'item-v4', 'pending-v4', 5, 'upsert', timestamp, 4],
+    );
+
+    final db = AppDatabase(NativeDatabase.opened(raw));
+    addTearDown(db.close);
+
+    expect((await db.select(db.items).getSingle()).content, 'Item v4');
+    expect((await db.select(db.channels).getSingle()).serverRevision, 3);
+    final attachment = await db.select(db.attachments).getSingle();
+    expect(attachment.serverRevision, 2);
+    expect(attachment.sha256, isNull);
+    final mutation = await db.select(db.syncOutbox).getSingle();
+    expect(mutation.entityType, 'item');
+    expect(mutation.entityId, 'item-v4');
+    expect(mutation.mutationId, 'pending-v4');
+    expect(mutation.baseRevision, 5);
+    expect(mutation.retryCount, 4);
+    final version = await db.customSelect('PRAGMA user_version').getSingle();
+    expect(version.data['user_version'], 5);
   });
 }

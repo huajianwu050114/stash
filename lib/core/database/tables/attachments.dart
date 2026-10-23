@@ -15,6 +15,9 @@ class Attachments extends Table {
 
   IntColumn get byteSize => integer().nullable()();
 
+  /// Portable SHA-256 of the managed blob, computed lazily for older data.
+  TextColumn get sha256 => text().nullable()();
+
   DateTimeColumn get createdAt => dateTime()();
 
   DateTimeColumn get deletedAt => dateTime().nullable()();
