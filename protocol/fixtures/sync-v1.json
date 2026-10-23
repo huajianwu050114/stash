@@ -1,0 +1,71 @@
+{
+  "protocolVersion": 1,
+  "channel": {
+    "entityType": "channel",
+    "entityId": "channel-1",
+    "mutationId": "mutation-channel-1",
+    "baseRevision": 0,
+    "operation": "upsert",
+    "payload": {
+      "id": "channel-1",
+      "name": "Research",
+      "parentId": null,
+      "createdAt": "2026-01-01T00:00:00.000Z",
+      "updatedAt": "2026-01-01T00:00:00.000Z",
+      "deletedAt": null,
+      "serverRevision": 0
+    }
+  },
+  "item": {
+    "entityType": "item",
+    "entityId": "item-1",
+    "mutationId": "mutation-item-1",
+    "baseRevision": 0,
+    "operation": "upsert",
+    "payload": {
+      "id": "item-1",
+      "title": "Fixture",
+      "content": "Cross-language fixture",
+      "note": null,
+      "channelId": "channel-1",
+      "documentJson": null,
+      "tags": [],
+      "isPinned": false,
+      "createdAt": "2026-01-01T00:00:00.000Z",
+      "updatedAt": "2026-01-01T00:00:00.000Z",
+      "deletedAt": null,
+      "serverRevision": 0
+    }
+  },
+  "attachment": {
+    "entityType": "attachment",
+    "entityId": "attachment-1",
+    "mutationId": "mutation-attachment-1",
+    "baseRevision": 0,
+    "operation": "upsert",
+    "payload": {
+      "id": "attachment-1",
+      "itemId": "item-1",
+      "mimeType": "application/octet-stream",
+      "originalFileName": "fixture.bin",
+      "byteSize": 4,
+      "sha256": "9f64a747e1b97f131fabb6b447296c9b6f0201e79fb3c5356e6c77e89b6a806a",
+      "createdAt": "2026-01-01T00:00:00.000Z",
+      "deletedAt": null,
+      "serverRevision": 0
+    }
+  },
+  "accepted": {
+    "outcome": "accepted",
+    "remoteRevision": 1
+  },
+  "conflict": {
+    "outcome": "conflict",
+    "remoteRevision": 1
+  },
+  "pull": {
+    "after": 0,
+    "limit": 2,
+    "hasMoreAfterThreeChanges": true
+  }
+}

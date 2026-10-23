@@ -168,13 +168,22 @@ class FakeSyncRemote implements SyncRemote {
   }
 
   @override
-  Future<SyncPullResult> pull({required int afterCursor}) async {
+  Future<SyncPullResult> pull({
+    required int afterCursor,
+    int limit = 100,
+  }) async {
     if (failNextPull) {
       failNextPull = false;
       throw const SyncRemoteException('Injected pull failure.');
     }
+    final remaining = _changes
+        .where((change) => change.cursor > afterCursor)
+        .toList(growable: false);
+    final page = remaining.take(limit).toList(growable: false);
     return SyncPullResult(
-      changes: _changes.where((change) => change.cursor > afterCursor),
+      changes: page,
+      nextCursor: page.isEmpty ? afterCursor : page.last.cursor,
+      hasMore: remaining.length > page.length,
     );
   }
 

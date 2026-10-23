@@ -21,11 +21,13 @@ class SyncPushResult {
   const SyncPushResult({
     required this.outcome,
     this.remoteRevision,
+    this.changeCursor,
     this.message,
   });
 
   final SyncApplyOutcome outcome;
   final int? remoteRevision;
+  final int? changeCursor;
   final String? message;
 
   bool get wasAccepted =>
@@ -52,10 +54,15 @@ class SyncRemoteChange {
 }
 
 class SyncPullResult {
-  SyncPullResult({required Iterable<SyncRemoteChange> changes})
-    : changes = List.unmodifiable(changes);
+  SyncPullResult({
+    required Iterable<SyncRemoteChange> changes,
+    required this.nextCursor,
+    required this.hasMore,
+  }) : changes = List.unmodifiable(changes);
 
   final List<SyncRemoteChange> changes;
+  final int nextCursor;
+  final bool hasMore;
 }
 
 class SyncBlobDownload {
@@ -73,7 +80,7 @@ class SyncBlobDownload {
 abstract interface class SyncRemote {
   Future<SyncPushResult> push(SyncPushRequest request);
 
-  Future<SyncPullResult> pull({required int afterCursor});
+  Future<SyncPullResult> pull({required int afterCursor, int limit = 100});
 
   Future<void> putBlob({
     required String attachmentId,
@@ -126,10 +133,20 @@ class SyncCycleResult {
   final int cursor;
 }
 
+enum SyncRemoteFailureKind {
+  offline,
+  timeout,
+  unauthorized,
+  serverError,
+  protocolMismatch,
+  blobFailure,
+}
+
 class SyncRemoteException implements Exception {
-  const SyncRemoteException(this.message);
+  const SyncRemoteException(this.message, {this.kind});
 
   final String message;
+  final SyncRemoteFailureKind? kind;
 
   @override
   String toString() => 'SyncRemoteException: $message';

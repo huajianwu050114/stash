@@ -47,6 +47,7 @@ dependencies:
   sqlite3: ^3.6.0
   archive: ^4.0.9
   crypto: ^3.0.7
+  http: ^1.6.0
   hotkey_manager: ^0.2.3
   screen_retriever: ^0.2.2
   window_manager: ^0.5.2

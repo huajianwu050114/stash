@@ -1,0 +1,13 @@
+[
+  {
+    "AllowedOrigins": ["http://localhost:*"],
+    "AllowedMethods": ["GET", "PUT"],
+    "AllowedHeaders": [
+      "Content-Type",
+      "x-amz-meta-sha256",
+      "x-amz-meta-byte-size"
+    ],
+    "ExposeHeaders": ["ETag"],
+    "MaxAgeSeconds": 300
+  }
+]

@@ -1,0 +1,25 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "stash-sync-dev",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": true,
+  "vars": {
+    "R2_ACCOUNT_ID": "REPLACE_WITH_DEV_ACCOUNT_ID",
+    "R2_BUCKET_NAME": "stash-sync-dev-blobs",
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "stash-sync-dev",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations",
+    },
+  ],
+  "r2_buckets": [
+    {
+      "binding": "BLOBS",
+      "bucket_name": "stash-sync-dev-blobs",
+    },
+  ],
+}

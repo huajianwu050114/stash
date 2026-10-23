@@ -77,6 +77,31 @@ void main() {
   );
 
   group('Fake SyncRemote contract', () {
+    test('pull pagination is bounded and preserves ordered cursors', () async {
+      final remote = FakeSyncRemote();
+      for (var index = 0; index < 5; index++) {
+        await remote.push(
+          SyncPushRequest(
+            entity: SyncEntityKey(type: SyncEntityType.item, id: 'item-$index'),
+            mutationId: 'mutation-$index',
+            baseRevision: 0,
+            operation: SyncOperation.upsert,
+            payload: itemPayload(id: 'item-$index').toJson(),
+          ),
+        );
+      }
+      final first = await remote.pull(afterCursor: 0, limit: 2);
+      final second = await remote.pull(afterCursor: first.nextCursor, limit: 2);
+      final third = await remote.pull(afterCursor: second.nextCursor, limit: 2);
+      expect(first.changes.map((change) => change.cursor), [1, 2]);
+      expect(second.changes.map((change) => change.cursor), [3, 4]);
+      expect(third.changes.map((change) => change.cursor), [5]);
+      expect(
+        [first.hasMore, second.hasMore, third.hasMore],
+        [true, true, false],
+      );
+    });
+
     test(
       'enforces revisions, dependencies, idempotency, and typed keys',
       () async {

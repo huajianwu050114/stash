@@ -47,3 +47,12 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# Cloudflare local state and secrets
+/cloudflare/node_modules/
+/cloudflare/.wrangler/
+/cloudflare/.dev.vars
+/cloudflare/.dev.vars.*
+!/cloudflare/.dev.vars.example
+/cloudflare/.env*
+!/cloudflare/.env.example

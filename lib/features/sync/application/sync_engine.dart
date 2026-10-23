@@ -18,11 +18,15 @@ class SyncEngine {
     required AppDatabase database,
     required Directory storageRoot,
     this._beforeApplyPushAck,
+    this.pullPageSize = 100,
+    this.maxPullPages = 100,
   }) : _local = SyncLocalStore(database, storageRoot);
 
   final SyncRemote _remote;
   final SyncLocalStore _local;
   final BeforeApplyPushAck? _beforeApplyPushAck;
+  final int pullPageSize;
+  final int maxPullPages;
 
   Future<void> bootstrapLocalReplicaForSync() =>
       _local.bootstrapLocalReplicaForSync();
@@ -101,46 +105,75 @@ class SyncEngine {
 
     var cursor = await _local.readPullCursor();
     try {
-      final response = await _remote.pull(afterCursor: cursor);
-      for (final change in response.changes) {
-        final localRevision = await _local.serverRevisionFor(change.entity);
-        final pending = await _local.pendingFor(change.entity);
-        if (change.remoteRevision <= localRevision) {
+      var pageCount = 0;
+      var hasMore = true;
+      while (hasMore) {
+        if (pageCount >= maxPullPages) {
+          throw const SyncRemoteException(
+            'Pull pagination exceeded the configured safety bound.',
+            kind: SyncRemoteFailureKind.protocolMismatch,
+          );
+        }
+        final response = await _remote.pull(
+          afterCursor: cursor,
+          limit: pullPageSize,
+        );
+        pageCount++;
+        if (response.nextCursor < cursor ||
+            (response.hasMore && response.nextCursor == cursor)) {
+          throw const SyncRemoteException(
+            'Remote pull cursor did not advance.',
+            kind: SyncRemoteFailureKind.protocolMismatch,
+          );
+        }
+        var stoppedForConflict = false;
+        for (final change in response.changes) {
+          final localRevision = await _local.serverRevisionFor(change.entity);
+          final pending = await _local.pendingFor(change.entity);
+          if (change.remoteRevision <= localRevision) {
+            await _local.writePullCursor(change.cursor);
+            cursor = change.cursor;
+            continue;
+          }
+          if (pending != null) {
+            conflicts.add(
+              SyncConflict(
+                entity: change.entity,
+                localMutation: pending,
+                localServerRevision: localRevision,
+                remoteChange: change,
+              ),
+            );
+            stoppedForConflict = true;
+            break;
+          }
+
+          String? relativePath;
+          if (change.entity.type == SyncEntityType.attachment &&
+              change.operation == SyncOperation.upsert) {
+            final payload = AttachmentSyncPayload.fromJson(change.payload);
+            final blob = await _remote.getBlob(change.entity.id);
+            if (blob == null) {
+              throw const SyncRemoteException(
+                'Remote attachment metadata has no blob.',
+              );
+            }
+            relativePath = await _local.installRemoteBlob(payload, blob);
+          }
+          await _local.applyRemoteChange(
+            change,
+            attachmentRelativePath: relativePath,
+          );
           await _local.writePullCursor(change.cursor);
           cursor = change.cursor;
-          continue;
+          pulled++;
         }
-        if (pending != null) {
-          conflicts.add(
-            SyncConflict(
-              entity: change.entity,
-              localMutation: pending,
-              localServerRevision: localRevision,
-              remoteChange: change,
-            ),
-          );
-          break;
+        if (stoppedForConflict) break;
+        if (response.changes.isEmpty && response.nextCursor > cursor) {
+          await _local.writePullCursor(response.nextCursor);
+          cursor = response.nextCursor;
         }
-
-        String? relativePath;
-        if (change.entity.type == SyncEntityType.attachment &&
-            change.operation == SyncOperation.upsert) {
-          final payload = AttachmentSyncPayload.fromJson(change.payload);
-          final blob = await _remote.getBlob(change.entity.id);
-          if (blob == null) {
-            throw const SyncRemoteException(
-              'Remote attachment metadata has no blob.',
-            );
-          }
-          relativePath = await _local.installRemoteBlob(payload, blob);
-        }
-        await _local.applyRemoteChange(
-          change,
-          attachmentRelativePath: relativePath,
-        );
-        await _local.writePullCursor(change.cursor);
-        cursor = change.cursor;
-        pulled++;
+        hasMore = response.hasMore;
       }
     } catch (error) {
       errors.add(SyncFailure(stage: 'pull', message: '$error'));

@@ -1,0 +1,4 @@
+# Copy to .dev.vars for local-only development. Never commit real values.
+SYNC_BEARER_TOKEN=replace-with-at-least-32-random-bytes
+R2_ACCESS_KEY_ID=replace-with-dev-r2-access-key-id
+R2_SECRET_ACCESS_KEY=replace-with-dev-r2-secret-access-key
