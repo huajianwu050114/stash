@@ -120,7 +120,8 @@ void main() {
         expect(row.content, 'second paragraph');
         expect(row.documentJson, second.documentJson);
         final outbox = await db.select(db.syncOutbox).getSingle();
-        expect(outbox.itemId, item.id);
+        expect(outbox.entityType, 'item');
+        expect(outbox.entityId, item.id);
         expect(outbox.op, 'upsert');
       },
     );
@@ -128,6 +129,18 @@ void main() {
     test(
       'attachment-only documents are valid but empty documents are rejected',
       () async {
+        final now = DateTime.utc(2026);
+        await db
+            .into(db.attachments)
+            .insert(
+              AttachmentsCompanion.insert(
+                id: 'image-id',
+                itemId: 'image-item',
+                mimeType: 'image/png',
+                relativePath: 'attachments/image-id.png',
+                createdAt: now,
+              ),
+            );
         final image = Document.fromJson([
           {
             'insert': BlockEmbed.custom(const StashImageEmbed('image-id'))
@@ -135,9 +148,23 @@ void main() {
           },
           {'insert': '\n'},
         ]);
-        final created = await items.createItem(document: codec.snapshot(image));
+        final created = await items.createItem(
+          id: 'image-item',
+          document: codec.snapshot(image),
+        );
         expect(created.content, isEmpty);
 
+        await db
+            .into(db.attachments)
+            .insert(
+              AttachmentsCompanion.insert(
+                id: 'file-id',
+                itemId: 'file-item',
+                mimeType: 'application/pdf',
+                relativePath: 'attachments/file-id.pdf',
+                createdAt: now,
+              ),
+            );
         final file = Document.fromJson([
           {
             'insert': BlockEmbed.custom(const StashFileEmbed('file-id'))
@@ -145,7 +172,10 @@ void main() {
           },
           {'insert': '\n'},
         ]);
-        final fileItem = await items.createItem(document: codec.snapshot(file));
+        final fileItem = await items.createItem(
+          id: 'file-item',
+          document: codec.snapshot(file),
+        );
         expect(fileItem.content, isEmpty);
 
         await expectLater(

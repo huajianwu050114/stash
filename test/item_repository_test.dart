@@ -1,4 +1,4 @@
-import 'package:drift/drift.dart' show Value;
+import 'package:drift/drift.dart' hide isNotNull, isNull;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stash/core/database/app_database.dart';
 import 'package:stash/features/items/data/item_repository.dart';
@@ -19,9 +19,11 @@ void main() {
     await db.close();
   });
 
-  Future<SyncOutboxEntry?> outboxEntry(String itemId) => (db.select(
-    db.syncOutbox,
-  )..where((t) => t.itemId.equals(itemId))).getSingleOrNull();
+  Future<SyncOutboxEntry?> outboxEntry(String itemId) =>
+      (db.select(db.syncOutbox)..where(
+            (t) => t.entityType.equals('item') & t.entityId.equals(itemId),
+          ))
+          .getSingleOrNull();
 
   Future<ItemRecord?> itemRecord(String id) =>
       (db.select(db.items)..where((t) => t.id.equals(id))).getSingleOrNull();
@@ -38,7 +40,9 @@ void main() {
     await (db.update(db.items)..where((t) => t.id.equals(id))).write(
       ItemsCompanion(serverRevision: Value(revision)),
     );
-    await (db.delete(db.syncOutbox)..where((t) => t.itemId.equals(id))).go();
+    await (db.delete(
+      db.syncOutbox,
+    )..where((t) => t.entityType.equals('item') & t.entityId.equals(id))).go();
   }
 
   /// Lets pending drift stream emissions and microtasks settle.
@@ -425,9 +429,11 @@ void main() {
       await repository.updateItem(item.id, note: const FieldUpdate.set('n'));
       await repository.setPinned(item.id, true);
 
-      final rows = await (db.select(
-        db.syncOutbox,
-      )..where((t) => t.itemId.equals(item.id))).get();
+      final rows =
+          await (db.select(db.syncOutbox)..where(
+                (t) => t.entityType.equals('item') & t.entityId.equals(item.id),
+              ))
+              .get();
       expect(
         rows,
         hasLength(1),

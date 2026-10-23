@@ -14,6 +14,9 @@ class Channels extends Table {
 
   DateTimeColumn get deletedAt => dateTime().nullable()();
 
+  /// 0 means this channel has never been acknowledged by a remote.
+  IntColumn get serverRevision => integer().withDefault(const Constant(0))();
+
   @override
   Set<Column> get primaryKey => {id};
 }

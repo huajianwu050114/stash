@@ -48,7 +48,10 @@ void main() {
       expect(summary.manifest.format, BackupManifest.formatName);
       expect(summary.manifest.formatVersion, 1);
       expect(summary.manifest.sourceProfile, 'dev');
-      expect(summary.manifest.databaseSchemaVersion, 3);
+      expect(
+        summary.manifest.databaseSchemaVersion,
+        AppDatabase.currentSchemaVersion,
+      );
       expect(summary.manifest.itemCount, 0);
       expect(summary.manifest.channelCount, 0);
       expect(summary.manifest.attachmentCount, 0);
@@ -267,7 +270,7 @@ void main() {
         );
 
         json['formatVersion'] = 1;
-        json['databaseSchemaVersion'] = 4;
+        json['databaseSchemaVersion'] = AppDatabase.currentSchemaVersion + 1;
         await manifestFile.writeAsString(jsonEncode(json));
         await expectLater(
           fixture.validator.validateDirectory(
@@ -510,13 +513,13 @@ void main() {
         profile: AppProfile.dev,
         storage: storage,
         appVersion: 'test',
-        currentSchemaVersion: 3,
+        currentSchemaVersion: AppDatabase.currentSchemaVersion,
       );
       final result = await PreMigrationBackupCoordinator(
         storage: storage,
         backupService: service,
         backupDirectoryResolver: _FixedDirectoryResolver(backupDirectory),
-        currentSchemaVersion: 3,
+        currentSchemaVersion: AppDatabase.currentSchemaVersion,
         clock: () => DateTime.utc(2026, 10, 14, 12),
       ).createIfNeeded();
 
@@ -545,13 +548,13 @@ class _Fixture {
        attachments = AttachmentRepository(database, storageRoot: storage.root),
        validator = const BackupValidator(
          archiveCodec: ZipBackupArchiveCodec(),
-         currentSchemaVersion: 3,
+         currentSchemaVersion: AppDatabase.currentSchemaVersion,
        ),
        backupService = BackupService(
          profile: AppProfile.dev,
          storage: storage,
          appVersion: '0.5.0-test',
-         currentSchemaVersion: 3,
+         currentSchemaVersion: AppDatabase.currentSchemaVersion,
          clock: _fixedClock,
        );
 
@@ -585,7 +588,7 @@ class _Fixture {
     profile: AppProfile.dev,
     storage: storage,
     appVersion: 'test',
-    currentSchemaVersion: 3,
+    currentSchemaVersion: AppDatabase.currentSchemaVersion,
     archiveCodec: archiveCodec,
     snapshotter: snapshotter,
     fileCopier: fileCopier,

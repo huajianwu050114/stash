@@ -27,6 +27,7 @@ import '../features/quick_channel/data/quick_channel_configuration_repository.da
 import '../features/quick_stash/application/quick_stash_controller.dart';
 import '../features/quick_stash/application/quick_stash_settings_controller.dart';
 import '../features/quick_stash/data/quick_stash_settings_repository.dart';
+import '../features/sync/data/sync_outbox_repository.dart';
 import '../platform/desktop_window/desktop_window_service.dart';
 import '../platform/attachment_file_actions/attachment_file_actions.dart';
 import '../platform/backup/backup_platform.dart';
@@ -72,12 +73,22 @@ final databaseProvider = Provider<AppDatabase>((ref) {
   return database;
 });
 
+final syncOutboxRepositoryProvider = Provider<SyncOutboxRepository>(
+  (ref) => SyncOutboxRepository(ref.watch(databaseProvider)),
+);
+
 final itemRepositoryProvider = Provider<ItemRepository>(
-  (ref) => ItemRepository(ref.watch(databaseProvider)),
+  (ref) => ItemRepository(
+    ref.watch(databaseProvider),
+    outbox: ref.watch(syncOutboxRepositoryProvider),
+  ),
 );
 
 final channelRepositoryProvider = Provider<ChannelRepository>(
-  (ref) => ChannelRepository(ref.watch(databaseProvider)),
+  (ref) => ChannelRepository(
+    ref.watch(databaseProvider),
+    outbox: ref.watch(syncOutboxRepositoryProvider),
+  ),
 );
 
 final attachmentRepositoryProvider = Provider<AttachmentRepository>((ref) {

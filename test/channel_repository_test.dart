@@ -1,7 +1,9 @@
+import 'package:drift/drift.dart' hide isNotNull, isNull;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stash/core/database/app_database.dart';
 import 'package:stash/features/channels/data/channel_repository.dart';
 import 'package:stash/features/items/data/item_repository.dart';
+import 'package:stash/features/sync/domain/sync_models.dart';
 
 import 'test_database.dart';
 
@@ -17,6 +19,12 @@ void main() {
   });
 
   tearDown(() => db.close());
+
+  Future<SyncOutboxEntry> channelMutation(String id) =>
+      (db.select(db.syncOutbox)..where(
+            (row) => row.entityType.equals('channel') & row.entityId.equals(id),
+          ))
+          .getSingle();
 
   test(
     'creates roots and arbitrarily deep children with breadcrumbs',
@@ -37,6 +45,11 @@ void main() {
       expect(root.name, 'Network');
       expect((await channels.watchRootChannels().first).single.id, root.id);
       expect((await channels.getBreadcrumbs(parent.id)), hasLength(13));
+      final pending = await (db.select(
+        db.syncOutbox,
+      )..where((row) => row.entityType.equals('channel'))).get();
+      expect(pending, hasLength(13));
+      expect(pending.every((entry) => entry.op == 'upsert'), isTrue);
     },
   );
 
@@ -144,5 +157,51 @@ void main() {
       channels.createRootChannel(name: '   '),
       throwsArgumentError,
     );
+  });
+
+  test('channel mutations queue and coalesce with no-op suppression', () async {
+    final root = await channels.createRootChannel(id: 'root', name: 'Root');
+    var mutation = await channelMutation(root.id);
+    expect(mutation.op, SyncOperation.upsert.wireValue);
+    expect(mutation.baseRevision, 0);
+
+    await (db.update(db.channels)..where((row) => row.id.equals(root.id)))
+        .write(const ChannelsCompanion(serverRevision: Value(7)));
+    await db.delete(db.syncOutbox).go();
+
+    await channels.renameChannel(root.id, 'Root');
+    await channels.moveChannel(root.id, parentId: null);
+    expect(await db.select(db.syncOutbox).get(), isEmpty);
+
+    await channels.renameChannel(root.id, 'Renamed');
+    final renamed = await channelMutation(root.id);
+    expect(renamed.baseRevision, 7);
+    await (db.update(db.syncOutbox)..where(
+          (row) =>
+              row.entityType.equals('channel') & row.entityId.equals(root.id),
+        ))
+        .write(const SyncOutboxCompanion(retryCount: Value(4)));
+
+    await channels.renameChannel(root.id, 'Renamed');
+    mutation = await channelMutation(root.id);
+    expect(mutation.mutationId, renamed.mutationId);
+    expect(mutation.retryCount, 4);
+
+    await channels.moveChannel(root.id, parentId: null);
+    mutation = await channelMutation(root.id);
+    expect(mutation.mutationId, renamed.mutationId);
+
+    final parent = await channels.createRootChannel(id: 'parent', name: 'P');
+    await channels.moveChannel(root.id, parentId: parent.id);
+    final moved = await channelMutation(root.id);
+    expect(moved.mutationId, isNot(renamed.mutationId));
+    expect(moved.baseRevision, 7);
+    expect(moved.retryCount, 0);
+
+    await channels.moveChannel(root.id, parentId: null);
+    await channels.softDeleteChannel(root.id);
+    final deleted = await channelMutation(root.id);
+    expect(deleted.op, SyncOperation.delete.wireValue);
+    expect(deleted.baseRevision, 7);
   });
 }

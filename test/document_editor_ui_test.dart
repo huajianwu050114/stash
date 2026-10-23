@@ -344,59 +344,62 @@ void main() {
     await disposeApp(tester);
   });
 
-  testWidgets('removing a persisted file then saving cleans the managed copy', (
-    tester,
-  ) async {
-    final source = File(path.join(supportDirectory.path, 'remove-me.pdf'));
-    source.writeAsBytesSync([9, 8, 7]);
-    filePicker.files = [
-      ImportedFileData.localFile(source, fileName: 'remove-me.pdf'),
-    ];
-    await pumpApp(tester);
-    await tester.tap(find.byKey(const Key('global-new-button')));
-    await pumpUi(tester);
-    await tester.tap(find.byKey(const Key('new-item-action')));
-    await pumpUi(tester);
-    final attachButton = tester.widget<IconButton>(
-      find.byKey(const Key('attach-file-button')),
-    );
-    await tester.runAsync(() async => (attachButton.onPressed as dynamic)());
-    await waitForAttachment(tester, db);
-    final row = await db.select(db.attachments).getSingle();
-    final managed = File(path.join(supportDirectory.path, row.relativePath));
-    await tester.tap(find.byKey(const Key('save-item-button')));
-    await pumpUi(tester);
-    final item = await db.select(db.items).getSingle();
+  testWidgets(
+    'removing a persisted file tombstones metadata and retains blob',
+    (tester) async {
+      final source = File(path.join(supportDirectory.path, 'remove-me.pdf'));
+      source.writeAsBytesSync([9, 8, 7]);
+      filePicker.files = [
+        ImportedFileData.localFile(source, fileName: 'remove-me.pdf'),
+      ];
+      await pumpApp(tester);
+      await tester.tap(find.byKey(const Key('global-new-button')));
+      await pumpUi(tester);
+      await tester.tap(find.byKey(const Key('new-item-action')));
+      await pumpUi(tester);
+      final attachButton = tester.widget<IconButton>(
+        find.byKey(const Key('attach-file-button')),
+      );
+      await tester.runAsync(() async => (attachButton.onPressed as dynamic)());
+      await waitForAttachment(tester, db);
+      final row = await db.select(db.attachments).getSingle();
+      final managed = File(path.join(supportDirectory.path, row.relativePath));
+      await tester.tap(find.byKey(const Key('save-item-button')));
+      await pumpUi(tester);
+      final item = await db.select(db.items).getSingle();
 
-    await tester.tap(find.byKey(Key('item-preview-${item.id}')));
-    await pumpUi(tester);
-    await tester.tap(find.byKey(const Key('edit-item-button')));
-    await pumpUi(tester);
-    final editor = tester.widget<QuillEditor>(
-      find.byKey(const Key('content-field')),
-    );
-    editor.controller.replaceText(
-      0,
-      1,
-      'kept text',
-      const TextSelection.collapsed(offset: 9),
-    );
-    await tester.pump();
-    expect(
-      const ItemDocumentCodec()
-          .snapshot(editor.controller.document)
-          .fileAttachmentIds,
-      isEmpty,
-    );
-    await tester.tap(find.byKey(const Key('save-item-button')));
-    await waitForAttachmentCount(tester, db, 0);
+      await tester.tap(find.byKey(Key('item-preview-${item.id}')));
+      await pumpUi(tester);
+      await tester.tap(find.byKey(const Key('edit-item-button')));
+      await pumpUi(tester);
+      final editor = tester.widget<QuillEditor>(
+        find.byKey(const Key('content-field')),
+      );
+      editor.controller.replaceText(
+        0,
+        1,
+        'kept text',
+        const TextSelection.collapsed(offset: 9),
+      );
+      await tester.pump();
+      expect(
+        const ItemDocumentCodec()
+            .snapshot(editor.controller.document)
+            .fileAttachmentIds,
+        isEmpty,
+      );
+      await tester.tap(find.byKey(const Key('save-item-button')));
+      await pumpUi(tester);
 
-    expect(await db.select(db.attachments).get(), isEmpty);
-    expect(managed.existsSync(), isFalse);
-    expect((await db.select(db.items).getSingle()).content, 'kept text');
-    expect(source.existsSync(), isTrue);
-    await disposeApp(tester);
-  });
+      final removed = await db.select(db.attachments).getSingle();
+      expect(removed.id, row.id);
+      expect(removed.deletedAt, isNotNull);
+      expect(managed.existsSync(), isTrue);
+      expect((await db.select(db.items).getSingle()).content, 'kept text');
+      expect(source.existsSync(), isTrue);
+      await disposeApp(tester);
+    },
+  );
 
   testWidgets('cancelled edit preserves an existing persisted file', (
     tester,

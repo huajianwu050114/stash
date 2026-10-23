@@ -58,6 +58,22 @@ void main() {
     await db.close();
   }
 
+  Future<void> seedAttachment({
+    required String id,
+    required String itemId,
+    required String mimeType,
+  }) => db
+      .into(db.attachments)
+      .insert(
+        AttachmentsCompanion.insert(
+          id: id,
+          itemId: itemId,
+          mimeType: mimeType,
+          relativePath: 'attachments/$id',
+          createdAt: DateTime.utc(2026),
+        ),
+      );
+
   testWidgets(
     'narrow root creates and browses nested channels with breadcrumbs',
     (tester) async {
@@ -143,6 +159,16 @@ void main() {
     tester,
   ) async {
     const codec = ItemDocumentCodec();
+    await seedAttachment(
+      id: 'first-image',
+      itemId: 'image-preview',
+      mimeType: 'image/png',
+    );
+    await seedAttachment(
+      id: 'second-image',
+      itemId: 'image-preview',
+      mimeType: 'image/png',
+    );
     final document = Document.fromJson([
       {
         'insert': BlockEmbed.custom(const StashImageEmbed('first-image'))
@@ -175,6 +201,16 @@ void main() {
     tester,
   ) async {
     const codec = ItemDocumentCodec();
+    await seedAttachment(
+      id: 'mixed-file',
+      itemId: 'mixed-preview',
+      mimeType: 'application/pdf',
+    );
+    await seedAttachment(
+      id: 'mixed-image',
+      itemId: 'mixed-preview',
+      mimeType: 'image/png',
+    );
     final snapshot = codec.snapshot(
       Document.fromJson([
         {'insert': 'Mixed body\n'},

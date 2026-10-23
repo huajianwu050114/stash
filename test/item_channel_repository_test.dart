@@ -1,3 +1,4 @@
+import 'package:drift/drift.dart' hide isNotNull, isNull;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stash/core/database/app_database.dart';
 import 'package:stash/features/channels/data/channel_repository.dart';
@@ -152,9 +153,13 @@ void main() {
         expect(restored.channelId, isNull);
         expect((await items.watchInboxItems().first).single.id, item.id);
         expect(await items.watchItemsInChannel(channel.id).first, isEmpty);
-        final pending = await (db.select(
-          db.syncOutbox,
-        )..where((row) => row.itemId.equals(item.id))).getSingle();
+        final pending =
+            await (db.select(db.syncOutbox)..where(
+                  (row) =>
+                      row.entityType.equals('item') &
+                      row.entityId.equals(item.id),
+                ))
+                .getSingle();
         expect(pending.op, 'upsert');
       },
     );

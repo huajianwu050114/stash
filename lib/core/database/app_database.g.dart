@@ -791,6 +791,18 @@ class $ChannelsTable extends Channels
     type: DriftSqlType.dateTime,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _serverRevisionMeta = const VerificationMeta(
+    'serverRevision',
+  );
+  @override
+  late final GeneratedColumn<int> serverRevision = GeneratedColumn<int>(
+    'server_revision',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -799,6 +811,7 @@ class $ChannelsTable extends Channels
     createdAt,
     updatedAt,
     deletedAt,
+    serverRevision,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -853,6 +866,15 @@ class $ChannelsTable extends Channels
         deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
       );
     }
+    if (data.containsKey('server_revision')) {
+      context.handle(
+        _serverRevisionMeta,
+        serverRevision.isAcceptableOrUnknown(
+          data['server_revision']!,
+          _serverRevisionMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -886,6 +908,10 @@ class $ChannelsTable extends Channels
         DriftSqlType.dateTime,
         data['${effectivePrefix}deleted_at'],
       ),
+      serverRevision: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}server_revision'],
+      )!,
     );
   }
 
@@ -902,6 +928,9 @@ class ChannelRecord extends DataClass implements Insertable<ChannelRecord> {
   final DateTime createdAt;
   final DateTime updatedAt;
   final DateTime? deletedAt;
+
+  /// 0 means this channel has never been acknowledged by a remote.
+  final int serverRevision;
   const ChannelRecord({
     required this.id,
     required this.name,
@@ -909,6 +938,7 @@ class ChannelRecord extends DataClass implements Insertable<ChannelRecord> {
     required this.createdAt,
     required this.updatedAt,
     this.deletedAt,
+    required this.serverRevision,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -923,6 +953,7 @@ class ChannelRecord extends DataClass implements Insertable<ChannelRecord> {
     if (!nullToAbsent || deletedAt != null) {
       map['deleted_at'] = Variable<DateTime>(deletedAt);
     }
+    map['server_revision'] = Variable<int>(serverRevision);
     return map;
   }
 
@@ -938,6 +969,7 @@ class ChannelRecord extends DataClass implements Insertable<ChannelRecord> {
       deletedAt: deletedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(deletedAt),
+      serverRevision: Value(serverRevision),
     );
   }
 
@@ -953,6 +985,7 @@ class ChannelRecord extends DataClass implements Insertable<ChannelRecord> {
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+      serverRevision: serializer.fromJson<int>(json['serverRevision']),
     );
   }
   @override
@@ -965,6 +998,7 @@ class ChannelRecord extends DataClass implements Insertable<ChannelRecord> {
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+      'serverRevision': serializer.toJson<int>(serverRevision),
     };
   }
 
@@ -975,6 +1009,7 @@ class ChannelRecord extends DataClass implements Insertable<ChannelRecord> {
     DateTime? createdAt,
     DateTime? updatedAt,
     Value<DateTime?> deletedAt = const Value.absent(),
+    int? serverRevision,
   }) => ChannelRecord(
     id: id ?? this.id,
     name: name ?? this.name,
@@ -982,6 +1017,7 @@ class ChannelRecord extends DataClass implements Insertable<ChannelRecord> {
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+    serverRevision: serverRevision ?? this.serverRevision,
   );
   ChannelRecord copyWithCompanion(ChannelsCompanion data) {
     return ChannelRecord(
@@ -991,6 +1027,9 @@ class ChannelRecord extends DataClass implements Insertable<ChannelRecord> {
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+      serverRevision: data.serverRevision.present
+          ? data.serverRevision.value
+          : this.serverRevision,
     );
   }
 
@@ -1002,14 +1041,22 @@ class ChannelRecord extends DataClass implements Insertable<ChannelRecord> {
           ..write('parentId: $parentId, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
-          ..write('deletedAt: $deletedAt')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('serverRevision: $serverRevision')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, name, parentId, createdAt, updatedAt, deletedAt);
+  int get hashCode => Object.hash(
+    id,
+    name,
+    parentId,
+    createdAt,
+    updatedAt,
+    deletedAt,
+    serverRevision,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1019,7 +1066,8 @@ class ChannelRecord extends DataClass implements Insertable<ChannelRecord> {
           other.parentId == this.parentId &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
-          other.deletedAt == this.deletedAt);
+          other.deletedAt == this.deletedAt &&
+          other.serverRevision == this.serverRevision);
 }
 
 class ChannelsCompanion extends UpdateCompanion<ChannelRecord> {
@@ -1029,6 +1077,7 @@ class ChannelsCompanion extends UpdateCompanion<ChannelRecord> {
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<DateTime?> deletedAt;
+  final Value<int> serverRevision;
   final Value<int> rowid;
   const ChannelsCompanion({
     this.id = const Value.absent(),
@@ -1037,6 +1086,7 @@ class ChannelsCompanion extends UpdateCompanion<ChannelRecord> {
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
+    this.serverRevision = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   ChannelsCompanion.insert({
@@ -1046,6 +1096,7 @@ class ChannelsCompanion extends UpdateCompanion<ChannelRecord> {
     required DateTime createdAt,
     required DateTime updatedAt,
     this.deletedAt = const Value.absent(),
+    this.serverRevision = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        name = Value(name),
@@ -1058,6 +1109,7 @@ class ChannelsCompanion extends UpdateCompanion<ChannelRecord> {
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<DateTime>? deletedAt,
+    Expression<int>? serverRevision,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -1067,6 +1119,7 @@ class ChannelsCompanion extends UpdateCompanion<ChannelRecord> {
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (deletedAt != null) 'deleted_at': deletedAt,
+      if (serverRevision != null) 'server_revision': serverRevision,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1078,6 +1131,7 @@ class ChannelsCompanion extends UpdateCompanion<ChannelRecord> {
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<DateTime?>? deletedAt,
+    Value<int>? serverRevision,
     Value<int>? rowid,
   }) {
     return ChannelsCompanion(
@@ -1087,6 +1141,7 @@ class ChannelsCompanion extends UpdateCompanion<ChannelRecord> {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       deletedAt: deletedAt ?? this.deletedAt,
+      serverRevision: serverRevision ?? this.serverRevision,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1112,6 +1167,9 @@ class ChannelsCompanion extends UpdateCompanion<ChannelRecord> {
     if (deletedAt.present) {
       map['deleted_at'] = Variable<DateTime>(deletedAt.value);
     }
+    if (serverRevision.present) {
+      map['server_revision'] = Variable<int>(serverRevision.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1127,6 +1185,7 @@ class ChannelsCompanion extends UpdateCompanion<ChannelRecord> {
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt, ')
+          ..write('serverRevision: $serverRevision, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -1223,6 +1282,18 @@ class $AttachmentsTable extends Attachments
     type: DriftSqlType.dateTime,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _serverRevisionMeta = const VerificationMeta(
+    'serverRevision',
+  );
+  @override
+  late final GeneratedColumn<int> serverRevision = GeneratedColumn<int>(
+    'server_revision',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -1233,6 +1304,7 @@ class $AttachmentsTable extends Attachments
     byteSize,
     createdAt,
     deletedAt,
+    serverRevision,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1307,6 +1379,15 @@ class $AttachmentsTable extends Attachments
         deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
       );
     }
+    if (data.containsKey('server_revision')) {
+      context.handle(
+        _serverRevisionMeta,
+        serverRevision.isAcceptableOrUnknown(
+          data['server_revision']!,
+          _serverRevisionMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -1348,6 +1429,10 @@ class $AttachmentsTable extends Attachments
         DriftSqlType.dateTime,
         data['${effectivePrefix}deleted_at'],
       ),
+      serverRevision: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}server_revision'],
+      )!,
     );
   }
 
@@ -1369,6 +1454,9 @@ class AttachmentRecord extends DataClass
   final int? byteSize;
   final DateTime createdAt;
   final DateTime? deletedAt;
+
+  /// 0 means this attachment metadata has never been acknowledged remotely.
+  final int serverRevision;
   const AttachmentRecord({
     required this.id,
     required this.itemId,
@@ -1378,6 +1466,7 @@ class AttachmentRecord extends DataClass
     this.byteSize,
     required this.createdAt,
     this.deletedAt,
+    required this.serverRevision,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1396,6 +1485,7 @@ class AttachmentRecord extends DataClass
     if (!nullToAbsent || deletedAt != null) {
       map['deleted_at'] = Variable<DateTime>(deletedAt);
     }
+    map['server_revision'] = Variable<int>(serverRevision);
     return map;
   }
 
@@ -1415,6 +1505,7 @@ class AttachmentRecord extends DataClass
       deletedAt: deletedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(deletedAt),
+      serverRevision: Value(serverRevision),
     );
   }
 
@@ -1432,6 +1523,7 @@ class AttachmentRecord extends DataClass
       byteSize: serializer.fromJson<int?>(json['byteSize']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+      serverRevision: serializer.fromJson<int>(json['serverRevision']),
     );
   }
   @override
@@ -1446,6 +1538,7 @@ class AttachmentRecord extends DataClass
       'byteSize': serializer.toJson<int?>(byteSize),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+      'serverRevision': serializer.toJson<int>(serverRevision),
     };
   }
 
@@ -1458,6 +1551,7 @@ class AttachmentRecord extends DataClass
     Value<int?> byteSize = const Value.absent(),
     DateTime? createdAt,
     Value<DateTime?> deletedAt = const Value.absent(),
+    int? serverRevision,
   }) => AttachmentRecord(
     id: id ?? this.id,
     itemId: itemId ?? this.itemId,
@@ -1469,6 +1563,7 @@ class AttachmentRecord extends DataClass
     byteSize: byteSize.present ? byteSize.value : this.byteSize,
     createdAt: createdAt ?? this.createdAt,
     deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+    serverRevision: serverRevision ?? this.serverRevision,
   );
   AttachmentRecord copyWithCompanion(AttachmentsCompanion data) {
     return AttachmentRecord(
@@ -1484,6 +1579,9 @@ class AttachmentRecord extends DataClass
       byteSize: data.byteSize.present ? data.byteSize.value : this.byteSize,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+      serverRevision: data.serverRevision.present
+          ? data.serverRevision.value
+          : this.serverRevision,
     );
   }
 
@@ -1497,7 +1595,8 @@ class AttachmentRecord extends DataClass
           ..write('relativePath: $relativePath, ')
           ..write('byteSize: $byteSize, ')
           ..write('createdAt: $createdAt, ')
-          ..write('deletedAt: $deletedAt')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('serverRevision: $serverRevision')
           ..write(')'))
         .toString();
   }
@@ -1512,6 +1611,7 @@ class AttachmentRecord extends DataClass
     byteSize,
     createdAt,
     deletedAt,
+    serverRevision,
   );
   @override
   bool operator ==(Object other) =>
@@ -1524,7 +1624,8 @@ class AttachmentRecord extends DataClass
           other.relativePath == this.relativePath &&
           other.byteSize == this.byteSize &&
           other.createdAt == this.createdAt &&
-          other.deletedAt == this.deletedAt);
+          other.deletedAt == this.deletedAt &&
+          other.serverRevision == this.serverRevision);
 }
 
 class AttachmentsCompanion extends UpdateCompanion<AttachmentRecord> {
@@ -1536,6 +1637,7 @@ class AttachmentsCompanion extends UpdateCompanion<AttachmentRecord> {
   final Value<int?> byteSize;
   final Value<DateTime> createdAt;
   final Value<DateTime?> deletedAt;
+  final Value<int> serverRevision;
   final Value<int> rowid;
   const AttachmentsCompanion({
     this.id = const Value.absent(),
@@ -1546,6 +1648,7 @@ class AttachmentsCompanion extends UpdateCompanion<AttachmentRecord> {
     this.byteSize = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
+    this.serverRevision = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   AttachmentsCompanion.insert({
@@ -1557,6 +1660,7 @@ class AttachmentsCompanion extends UpdateCompanion<AttachmentRecord> {
     this.byteSize = const Value.absent(),
     required DateTime createdAt,
     this.deletedAt = const Value.absent(),
+    this.serverRevision = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        itemId = Value(itemId),
@@ -1572,6 +1676,7 @@ class AttachmentsCompanion extends UpdateCompanion<AttachmentRecord> {
     Expression<int>? byteSize,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? deletedAt,
+    Expression<int>? serverRevision,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -1583,6 +1688,7 @@ class AttachmentsCompanion extends UpdateCompanion<AttachmentRecord> {
       if (byteSize != null) 'byte_size': byteSize,
       if (createdAt != null) 'created_at': createdAt,
       if (deletedAt != null) 'deleted_at': deletedAt,
+      if (serverRevision != null) 'server_revision': serverRevision,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1596,6 +1702,7 @@ class AttachmentsCompanion extends UpdateCompanion<AttachmentRecord> {
     Value<int?>? byteSize,
     Value<DateTime>? createdAt,
     Value<DateTime?>? deletedAt,
+    Value<int>? serverRevision,
     Value<int>? rowid,
   }) {
     return AttachmentsCompanion(
@@ -1607,6 +1714,7 @@ class AttachmentsCompanion extends UpdateCompanion<AttachmentRecord> {
       byteSize: byteSize ?? this.byteSize,
       createdAt: createdAt ?? this.createdAt,
       deletedAt: deletedAt ?? this.deletedAt,
+      serverRevision: serverRevision ?? this.serverRevision,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1638,6 +1746,9 @@ class AttachmentsCompanion extends UpdateCompanion<AttachmentRecord> {
     if (deletedAt.present) {
       map['deleted_at'] = Variable<DateTime>(deletedAt.value);
     }
+    if (serverRevision.present) {
+      map['server_revision'] = Variable<int>(serverRevision.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1655,6 +1766,7 @@ class AttachmentsCompanion extends UpdateCompanion<AttachmentRecord> {
           ..write('byteSize: $byteSize, ')
           ..write('createdAt: $createdAt, ')
           ..write('deletedAt: $deletedAt, ')
+          ..write('serverRevision: $serverRevision, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -1667,10 +1779,23 @@ class $SyncOutboxTable extends SyncOutbox
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
   $SyncOutboxTable(this.attachedDatabase, [this._alias]);
-  static const VerificationMeta _itemIdMeta = const VerificationMeta('itemId');
+  static const VerificationMeta _entityTypeMeta = const VerificationMeta(
+    'entityType',
+  );
   @override
-  late final GeneratedColumn<String> itemId = GeneratedColumn<String>(
-    'item_id',
+  late final GeneratedColumn<String> entityType = GeneratedColumn<String>(
+    'entity_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _entityIdMeta = const VerificationMeta(
+    'entityId',
+  );
+  @override
+  late final GeneratedColumn<String> entityId = GeneratedColumn<String>(
+    'entity_id',
     aliasedName,
     false,
     type: DriftSqlType.string,
@@ -1732,7 +1857,8 @@ class $SyncOutboxTable extends SyncOutbox
   );
   @override
   List<GeneratedColumn> get $columns => [
-    itemId,
+    entityType,
+    entityId,
     mutationId,
     baseRevision,
     op,
@@ -1751,13 +1877,21 @@ class $SyncOutboxTable extends SyncOutbox
   }) {
     final context = VerificationContext();
     final data = instance.toColumns(true);
-    if (data.containsKey('item_id')) {
+    if (data.containsKey('entity_type')) {
       context.handle(
-        _itemIdMeta,
-        itemId.isAcceptableOrUnknown(data['item_id']!, _itemIdMeta),
+        _entityTypeMeta,
+        entityType.isAcceptableOrUnknown(data['entity_type']!, _entityTypeMeta),
       );
     } else if (isInserting) {
-      context.missing(_itemIdMeta);
+      context.missing(_entityTypeMeta);
+    }
+    if (data.containsKey('entity_id')) {
+      context.handle(
+        _entityIdMeta,
+        entityId.isAcceptableOrUnknown(data['entity_id']!, _entityIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_entityIdMeta);
     }
     if (data.containsKey('mutation_id')) {
       context.handle(
@@ -1801,14 +1935,18 @@ class $SyncOutboxTable extends SyncOutbox
   }
 
   @override
-  Set<GeneratedColumn> get $primaryKey => {itemId};
+  Set<GeneratedColumn> get $primaryKey => {entityType, entityId};
   @override
   SyncOutboxEntry map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return SyncOutboxEntry(
-      itemId: attachedDatabase.typeMapping.read(
+      entityType: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
-        data['${effectivePrefix}item_id'],
+        data['${effectivePrefix}entity_type'],
+      )!,
+      entityId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}entity_id'],
       )!,
       mutationId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
@@ -1840,18 +1978,20 @@ class $SyncOutboxTable extends SyncOutbox
 }
 
 class SyncOutboxEntry extends DataClass implements Insertable<SyncOutboxEntry> {
-  final String itemId;
+  final String entityType;
+  final String entityId;
 
   /// Refreshed on every local edit so a future sync can tell mutations apart.
   final String mutationId;
   final int baseRevision;
 
-  /// Minimal operation hint for a future sync: 'upsert' or 'delete'.
+  /// Stable wire value: `upsert` or `delete`.
   final String op;
   final DateTime createdAt;
   final int retryCount;
   const SyncOutboxEntry({
-    required this.itemId,
+    required this.entityType,
+    required this.entityId,
     required this.mutationId,
     required this.baseRevision,
     required this.op,
@@ -1861,7 +2001,8 @@ class SyncOutboxEntry extends DataClass implements Insertable<SyncOutboxEntry> {
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
-    map['item_id'] = Variable<String>(itemId);
+    map['entity_type'] = Variable<String>(entityType);
+    map['entity_id'] = Variable<String>(entityId);
     map['mutation_id'] = Variable<String>(mutationId);
     map['base_revision'] = Variable<int>(baseRevision);
     map['op'] = Variable<String>(op);
@@ -1872,7 +2013,8 @@ class SyncOutboxEntry extends DataClass implements Insertable<SyncOutboxEntry> {
 
   SyncOutboxCompanion toCompanion(bool nullToAbsent) {
     return SyncOutboxCompanion(
-      itemId: Value(itemId),
+      entityType: Value(entityType),
+      entityId: Value(entityId),
       mutationId: Value(mutationId),
       baseRevision: Value(baseRevision),
       op: Value(op),
@@ -1887,7 +2029,8 @@ class SyncOutboxEntry extends DataClass implements Insertable<SyncOutboxEntry> {
   }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return SyncOutboxEntry(
-      itemId: serializer.fromJson<String>(json['itemId']),
+      entityType: serializer.fromJson<String>(json['entityType']),
+      entityId: serializer.fromJson<String>(json['entityId']),
       mutationId: serializer.fromJson<String>(json['mutationId']),
       baseRevision: serializer.fromJson<int>(json['baseRevision']),
       op: serializer.fromJson<String>(json['op']),
@@ -1899,7 +2042,8 @@ class SyncOutboxEntry extends DataClass implements Insertable<SyncOutboxEntry> {
   Map<String, dynamic> toJson({ValueSerializer? serializer}) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
-      'itemId': serializer.toJson<String>(itemId),
+      'entityType': serializer.toJson<String>(entityType),
+      'entityId': serializer.toJson<String>(entityId),
       'mutationId': serializer.toJson<String>(mutationId),
       'baseRevision': serializer.toJson<int>(baseRevision),
       'op': serializer.toJson<String>(op),
@@ -1909,14 +2053,16 @@ class SyncOutboxEntry extends DataClass implements Insertable<SyncOutboxEntry> {
   }
 
   SyncOutboxEntry copyWith({
-    String? itemId,
+    String? entityType,
+    String? entityId,
     String? mutationId,
     int? baseRevision,
     String? op,
     DateTime? createdAt,
     int? retryCount,
   }) => SyncOutboxEntry(
-    itemId: itemId ?? this.itemId,
+    entityType: entityType ?? this.entityType,
+    entityId: entityId ?? this.entityId,
     mutationId: mutationId ?? this.mutationId,
     baseRevision: baseRevision ?? this.baseRevision,
     op: op ?? this.op,
@@ -1925,7 +2071,10 @@ class SyncOutboxEntry extends DataClass implements Insertable<SyncOutboxEntry> {
   );
   SyncOutboxEntry copyWithCompanion(SyncOutboxCompanion data) {
     return SyncOutboxEntry(
-      itemId: data.itemId.present ? data.itemId.value : this.itemId,
+      entityType: data.entityType.present
+          ? data.entityType.value
+          : this.entityType,
+      entityId: data.entityId.present ? data.entityId.value : this.entityId,
       mutationId: data.mutationId.present
           ? data.mutationId.value
           : this.mutationId,
@@ -1943,7 +2092,8 @@ class SyncOutboxEntry extends DataClass implements Insertable<SyncOutboxEntry> {
   @override
   String toString() {
     return (StringBuffer('SyncOutboxEntry(')
-          ..write('itemId: $itemId, ')
+          ..write('entityType: $entityType, ')
+          ..write('entityId: $entityId, ')
           ..write('mutationId: $mutationId, ')
           ..write('baseRevision: $baseRevision, ')
           ..write('op: $op, ')
@@ -1954,13 +2104,21 @@ class SyncOutboxEntry extends DataClass implements Insertable<SyncOutboxEntry> {
   }
 
   @override
-  int get hashCode =>
-      Object.hash(itemId, mutationId, baseRevision, op, createdAt, retryCount);
+  int get hashCode => Object.hash(
+    entityType,
+    entityId,
+    mutationId,
+    baseRevision,
+    op,
+    createdAt,
+    retryCount,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is SyncOutboxEntry &&
-          other.itemId == this.itemId &&
+          other.entityType == this.entityType &&
+          other.entityId == this.entityId &&
           other.mutationId == this.mutationId &&
           other.baseRevision == this.baseRevision &&
           other.op == this.op &&
@@ -1969,7 +2127,8 @@ class SyncOutboxEntry extends DataClass implements Insertable<SyncOutboxEntry> {
 }
 
 class SyncOutboxCompanion extends UpdateCompanion<SyncOutboxEntry> {
-  final Value<String> itemId;
+  final Value<String> entityType;
+  final Value<String> entityId;
   final Value<String> mutationId;
   final Value<int> baseRevision;
   final Value<String> op;
@@ -1977,7 +2136,8 @@ class SyncOutboxCompanion extends UpdateCompanion<SyncOutboxEntry> {
   final Value<int> retryCount;
   final Value<int> rowid;
   const SyncOutboxCompanion({
-    this.itemId = const Value.absent(),
+    this.entityType = const Value.absent(),
+    this.entityId = const Value.absent(),
     this.mutationId = const Value.absent(),
     this.baseRevision = const Value.absent(),
     this.op = const Value.absent(),
@@ -1986,20 +2146,23 @@ class SyncOutboxCompanion extends UpdateCompanion<SyncOutboxEntry> {
     this.rowid = const Value.absent(),
   });
   SyncOutboxCompanion.insert({
-    required String itemId,
+    required String entityType,
+    required String entityId,
     required String mutationId,
     required int baseRevision,
     required String op,
     required DateTime createdAt,
     this.retryCount = const Value.absent(),
     this.rowid = const Value.absent(),
-  }) : itemId = Value(itemId),
+  }) : entityType = Value(entityType),
+       entityId = Value(entityId),
        mutationId = Value(mutationId),
        baseRevision = Value(baseRevision),
        op = Value(op),
        createdAt = Value(createdAt);
   static Insertable<SyncOutboxEntry> custom({
-    Expression<String>? itemId,
+    Expression<String>? entityType,
+    Expression<String>? entityId,
     Expression<String>? mutationId,
     Expression<int>? baseRevision,
     Expression<String>? op,
@@ -2008,7 +2171,8 @@ class SyncOutboxCompanion extends UpdateCompanion<SyncOutboxEntry> {
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
-      if (itemId != null) 'item_id': itemId,
+      if (entityType != null) 'entity_type': entityType,
+      if (entityId != null) 'entity_id': entityId,
       if (mutationId != null) 'mutation_id': mutationId,
       if (baseRevision != null) 'base_revision': baseRevision,
       if (op != null) 'op': op,
@@ -2019,7 +2183,8 @@ class SyncOutboxCompanion extends UpdateCompanion<SyncOutboxEntry> {
   }
 
   SyncOutboxCompanion copyWith({
-    Value<String>? itemId,
+    Value<String>? entityType,
+    Value<String>? entityId,
     Value<String>? mutationId,
     Value<int>? baseRevision,
     Value<String>? op,
@@ -2028,7 +2193,8 @@ class SyncOutboxCompanion extends UpdateCompanion<SyncOutboxEntry> {
     Value<int>? rowid,
   }) {
     return SyncOutboxCompanion(
-      itemId: itemId ?? this.itemId,
+      entityType: entityType ?? this.entityType,
+      entityId: entityId ?? this.entityId,
       mutationId: mutationId ?? this.mutationId,
       baseRevision: baseRevision ?? this.baseRevision,
       op: op ?? this.op,
@@ -2041,8 +2207,11 @@ class SyncOutboxCompanion extends UpdateCompanion<SyncOutboxEntry> {
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
-    if (itemId.present) {
-      map['item_id'] = Variable<String>(itemId.value);
+    if (entityType.present) {
+      map['entity_type'] = Variable<String>(entityType.value);
+    }
+    if (entityId.present) {
+      map['entity_id'] = Variable<String>(entityId.value);
     }
     if (mutationId.present) {
       map['mutation_id'] = Variable<String>(mutationId.value);
@@ -2068,7 +2237,8 @@ class SyncOutboxCompanion extends UpdateCompanion<SyncOutboxEntry> {
   @override
   String toString() {
     return (StringBuffer('SyncOutboxCompanion(')
-          ..write('itemId: $itemId, ')
+          ..write('entityType: $entityType, ')
+          ..write('entityId: $entityId, ')
           ..write('mutationId: $mutationId, ')
           ..write('baseRevision: $baseRevision, ')
           ..write('op: $op, ')
@@ -2656,6 +2826,7 @@ typedef $$ChannelsTableCreateCompanionBuilder = ChannelsCompanion Function({
   required DateTime createdAt,
   required DateTime updatedAt,
   Value<DateTime?> deletedAt,
+  Value<int> serverRevision,
   Value<int> rowid,
 });
 typedef $$ChannelsTableUpdateCompanionBuilder = ChannelsCompanion Function({
@@ -2665,6 +2836,7 @@ typedef $$ChannelsTableUpdateCompanionBuilder = ChannelsCompanion Function({
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
   Value<DateTime?> deletedAt,
+  Value<int> serverRevision,
   Value<int> rowid,
 });
 
@@ -2721,6 +2893,11 @@ class $$ChannelsTableFilterComposer
 
   ColumnFilters<DateTime> get deletedAt => $composableBuilder(
     column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get serverRevision => $composableBuilder(
+    column: $table.serverRevision,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -2782,6 +2959,11 @@ class $$ChannelsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get serverRevision => $composableBuilder(
+    column: $table.serverRevision,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$ChannelsTableOrderingComposer get parentId {
     final $$ChannelsTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -2829,6 +3011,11 @@ class $$ChannelsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get deletedAt =>
       $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get serverRevision => $composableBuilder(
+    column: $table.serverRevision,
+    builder: (column) => column,
+  );
 
   $$ChannelsTableAnnotationComposer get parentId {
     final $$ChannelsTableAnnotationComposer composer = $composerBuilder(
@@ -2888,6 +3075,7 @@ class $$ChannelsTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> serverRevision = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ChannelsCompanion(
                 id: id,
@@ -2896,6 +3084,7 @@ class $$ChannelsTableTableManager
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 deletedAt: deletedAt,
+                serverRevision: serverRevision,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -2906,6 +3095,7 @@ class $$ChannelsTableTableManager
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> serverRevision = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ChannelsCompanion.insert(
                 id: id,
@@ -2914,6 +3104,7 @@ class $$ChannelsTableTableManager
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 deletedAt: deletedAt,
+                serverRevision: serverRevision,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -2991,6 +3182,7 @@ typedef $$AttachmentsTableCreateCompanionBuilder =
       Value<int?> byteSize,
       required DateTime createdAt,
       Value<DateTime?> deletedAt,
+      Value<int> serverRevision,
       Value<int> rowid,
     });
 typedef $$AttachmentsTableUpdateCompanionBuilder =
@@ -3003,6 +3195,7 @@ typedef $$AttachmentsTableUpdateCompanionBuilder =
       Value<int?> byteSize,
       Value<DateTime> createdAt,
       Value<DateTime?> deletedAt,
+      Value<int> serverRevision,
       Value<int> rowid,
     });
 
@@ -3052,6 +3245,11 @@ class $$AttachmentsTableFilterComposer
 
   ColumnFilters<DateTime> get deletedAt => $composableBuilder(
     column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get serverRevision => $composableBuilder(
+    column: $table.serverRevision,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -3104,6 +3302,11 @@ class $$AttachmentsTableOrderingComposer
     column: $table.deletedAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<int> get serverRevision => $composableBuilder(
+    column: $table.serverRevision,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$AttachmentsTableAnnotationComposer
@@ -3142,6 +3345,11 @@ class $$AttachmentsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get deletedAt =>
       $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get serverRevision => $composableBuilder(
+    column: $table.serverRevision,
+    builder: (column) => column,
+  );
 }
 
 class $$AttachmentsTableTableManager
@@ -3183,6 +3391,7 @@ class $$AttachmentsTableTableManager
                 Value<int?> byteSize = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> serverRevision = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => AttachmentsCompanion(
                 id: id,
@@ -3193,6 +3402,7 @@ class $$AttachmentsTableTableManager
                 byteSize: byteSize,
                 createdAt: createdAt,
                 deletedAt: deletedAt,
+                serverRevision: serverRevision,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -3205,6 +3415,7 @@ class $$AttachmentsTableTableManager
                 Value<int?> byteSize = const Value.absent(),
                 required DateTime createdAt,
                 Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> serverRevision = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => AttachmentsCompanion.insert(
                 id: id,
@@ -3215,6 +3426,7 @@ class $$AttachmentsTableTableManager
                 byteSize: byteSize,
                 createdAt: createdAt,
                 deletedAt: deletedAt,
+                serverRevision: serverRevision,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -3252,7 +3464,8 @@ typedef $$AttachmentsTableProcessedTableManager =
       PrefetchHooks Function()
     >;
 typedef $$SyncOutboxTableCreateCompanionBuilder = SyncOutboxCompanion Function({
-  required String itemId,
+  required String entityType,
+  required String entityId,
   required String mutationId,
   required int baseRevision,
   required String op,
@@ -3261,7 +3474,8 @@ typedef $$SyncOutboxTableCreateCompanionBuilder = SyncOutboxCompanion Function({
   Value<int> rowid,
 });
 typedef $$SyncOutboxTableUpdateCompanionBuilder = SyncOutboxCompanion Function({
-  Value<String> itemId,
+  Value<String> entityType,
+  Value<String> entityId,
   Value<String> mutationId,
   Value<int> baseRevision,
   Value<String> op,
@@ -3279,8 +3493,13 @@ class $$SyncOutboxTableFilterComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  ColumnFilters<String> get itemId => $composableBuilder(
-    column: $table.itemId,
+  ColumnFilters<String> get entityType => $composableBuilder(
+    column: $table.entityType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get entityId => $composableBuilder(
+    column: $table.entityId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -3319,8 +3538,13 @@ class $$SyncOutboxTableOrderingComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  ColumnOrderings<String> get itemId => $composableBuilder(
-    column: $table.itemId,
+  ColumnOrderings<String> get entityType => $composableBuilder(
+    column: $table.entityType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get entityId => $composableBuilder(
+    column: $table.entityId,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -3359,8 +3583,13 @@ class $$SyncOutboxTableAnnotationComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  GeneratedColumn<String> get itemId =>
-      $composableBuilder(column: $table.itemId, builder: (column) => column);
+  GeneratedColumn<String> get entityType => $composableBuilder(
+    column: $table.entityType,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get entityId =>
+      $composableBuilder(column: $table.entityId, builder: (column) => column);
 
   GeneratedColumn<String> get mutationId => $composableBuilder(
     column: $table.mutationId,
@@ -3415,7 +3644,8 @@ class $$SyncOutboxTableTableManager
               $$SyncOutboxTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback:
               ({
-                Value<String> itemId = const Value.absent(),
+                Value<String> entityType = const Value.absent(),
+                Value<String> entityId = const Value.absent(),
                 Value<String> mutationId = const Value.absent(),
                 Value<int> baseRevision = const Value.absent(),
                 Value<String> op = const Value.absent(),
@@ -3423,7 +3653,8 @@ class $$SyncOutboxTableTableManager
                 Value<int> retryCount = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SyncOutboxCompanion(
-                itemId: itemId,
+                entityType: entityType,
+                entityId: entityId,
                 mutationId: mutationId,
                 baseRevision: baseRevision,
                 op: op,
@@ -3433,7 +3664,8 @@ class $$SyncOutboxTableTableManager
               ),
           createCompanionCallback:
               ({
-                required String itemId,
+                required String entityType,
+                required String entityId,
                 required String mutationId,
                 required int baseRevision,
                 required String op,
@@ -3441,7 +3673,8 @@ class $$SyncOutboxTableTableManager
                 Value<int> retryCount = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SyncOutboxCompanion.insert(
-                itemId: itemId,
+                entityType: entityType,
+                entityId: entityId,
                 mutationId: mutationId,
                 baseRevision: baseRevision,
                 op: op,

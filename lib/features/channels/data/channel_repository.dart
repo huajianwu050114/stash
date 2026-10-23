@@ -2,6 +2,8 @@ import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/database/app_database.dart';
+import '../../sync/data/sync_outbox_repository.dart';
+import '../../sync/domain/sync_models.dart';
 import '../domain/channel.dart';
 
 class ChannelRepositoryException implements Exception {
@@ -12,9 +14,11 @@ class ChannelRepositoryException implements Exception {
 }
 
 class ChannelRepository {
-  ChannelRepository(this._db);
+  ChannelRepository(this._db, {SyncOutboxRepository? outbox})
+    : _outbox = outbox ?? SyncOutboxRepository(_db);
 
   final AppDatabase _db;
+  final SyncOutboxRepository _outbox;
   static final Uuid _uuid = Uuid();
 
   Future<Channel?> getChannelById(String id) async =>
@@ -84,6 +88,12 @@ class ChannelRepository {
       await (_db.update(_db.channels)..where((row) => row.id.equals(id))).write(
         ChannelsCompanion(name: Value(trimmed), updatedAt: Value(now)),
       );
+      await _outbox.enqueue(
+        entityType: SyncEntityType.channel,
+        entityId: id,
+        baseRevision: record.serverRevision,
+        operation: SyncOperation.upsert,
+      );
       return Channel(
         id: id,
         name: trimmed,
@@ -112,6 +122,12 @@ class ChannelRepository {
           _db.channels,
         )..where((row) => row.id.equals(id))).write(
           ChannelsCompanion(parentId: Value(parentId), updatedAt: Value(now)),
+        );
+        await _outbox.enqueue(
+          entityType: SyncEntityType.channel,
+          entityId: id,
+          baseRevision: record.serverRevision,
+          operation: SyncOperation.upsert,
         );
         return Channel(
           id: id,
@@ -150,6 +166,12 @@ class ChannelRepository {
     final now = DateTime.now();
     await (_db.update(_db.channels)..where((row) => row.id.equals(id))).write(
       ChannelsCompanion(deletedAt: Value(now), updatedAt: Value(now)),
+    );
+    await _outbox.enqueue(
+      entityType: SyncEntityType.channel,
+      entityId: id,
+      baseRevision: record.serverRevision,
+      operation: SyncOperation.delete,
     );
     return Channel(
       id: id,
@@ -202,6 +224,12 @@ class ChannelRepository {
             updatedAt: channel.updatedAt,
           ),
         );
+    await _outbox.enqueue(
+      entityType: SyncEntityType.channel,
+      entityId: channel.id,
+      baseRevision: 0,
+      operation: SyncOperation.upsert,
+    );
     return channel;
   });
 

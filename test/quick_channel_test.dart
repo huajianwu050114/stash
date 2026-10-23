@@ -236,6 +236,15 @@ void main() {
   testWidgets('palette keeps missing media compact beside text', (
     tester,
   ) async {
+    final supportDirectory = Directory.systemTemp.createTempSync(
+      'stash-quick-channel-missing-media-',
+    );
+    addTearDown(() {
+      if (supportDirectory.existsSync()) {
+        supportDirectory.deleteSync(recursive: true);
+      }
+    });
+    final attachments = AttachmentRepository(db, storageRoot: supportDirectory);
     final items = ItemRepository(db);
     final channel = await channels.createRootChannel(
       id: 'palette',
@@ -243,6 +252,17 @@ void main() {
     );
     const attachmentId = 'missing-image';
     const codec = ItemDocumentCodec();
+    await db
+        .into(db.attachments)
+        .insert(
+          AttachmentsCompanion.insert(
+            id: attachmentId,
+            itemId: 'missing-image-item',
+            mimeType: 'image/png',
+            relativePath: 'attachments/missing-image.png',
+            createdAt: DateTime.utc(2026),
+          ),
+        );
     Document imageDocument(String id) => Document.fromJson([
       {'insert': BlockEmbed.custom(StashImageEmbed(id)).toJson()},
       {'insert': '\n'},
@@ -261,15 +281,20 @@ void main() {
 
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [databaseProvider.overrideWithValue(db)],
+        overrides: [
+          databaseProvider.overrideWithValue(db),
+          attachmentRepositoryProvider.overrideWithValue(attachments),
+        ],
         child: const MaterialApp(
           home: QuickChannelPalette(channelId: 'palette'),
         ),
       ),
     );
     await tester.pump();
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 50)),
+    );
     await tester.pump(const Duration(milliseconds: 200));
-    await tester.pump();
 
     expect(find.text('Memes'), findsOneWidget);
     expect(

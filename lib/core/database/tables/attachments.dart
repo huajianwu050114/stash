@@ -19,6 +19,9 @@ class Attachments extends Table {
 
   DateTimeColumn get deletedAt => dateTime().nullable()();
 
+  /// 0 means this attachment metadata has never been acknowledged remotely.
+  IntColumn get serverRevision => integer().withDefault(const Constant(0))();
+
   @override
   Set<Column> get primaryKey => {id};
 }

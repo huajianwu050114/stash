@@ -39,6 +39,7 @@ void main() {
       'created_at',
       'updated_at',
       'deleted_at',
+      'server_revision',
     },
     'attachments': {
       'id',
@@ -49,9 +50,11 @@ void main() {
       'byte_size',
       'created_at',
       'deleted_at',
+      'server_revision',
     },
     'sync_outbox': {
-      'item_id',
+      'entity_type',
+      'entity_id',
       'mutation_id',
       'base_revision',
       'op',
@@ -77,10 +80,10 @@ void main() {
     return result;
   }
 
-  test('database is created at schema version 3', () async {
-    expect(db.schemaVersion, 3);
+  test('database is created at schema version 4', () async {
+    expect(db.schemaVersion, 4);
     final version = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(version.data['user_version'], 3);
+    expect(version.data['user_version'], 4);
   });
 
   test(
@@ -99,7 +102,7 @@ void main() {
   );
 
   test('committed schema export matches the live schema', () async {
-    final exportFile = File('drift_schemas/drift_schema_v3.json');
+    final exportFile = File('drift_schemas/drift_schema_v4.json');
     expect(
       exportFile.existsSync(),
       isTrue,
@@ -125,5 +128,19 @@ void main() {
   test('foreign key enforcement is enabled on open', () async {
     final fk = await db.customSelect('PRAGMA foreign_keys').getSingle();
     expect(fk.data['foreign_keys'], 1);
+  });
+
+  test('generic outbox uses composite entity primary key', () async {
+    final columns = await db
+        .customSelect('PRAGMA table_info(sync_outbox)')
+        .get();
+    final primaryKey = <int, String>{};
+    for (final column in columns) {
+      final position = column.data['pk']! as int;
+      if (position > 0) {
+        primaryKey[position] = column.data['name']! as String;
+      }
+    }
+    expect(primaryKey, {1: 'entity_type', 2: 'entity_id'});
   });
 }

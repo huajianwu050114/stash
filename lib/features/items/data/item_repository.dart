@@ -3,6 +3,8 @@ import 'package:uuid/uuid.dart';
 
 import '../../../core/database/app_database.dart';
 import '../../../core/database/tags_codec.dart';
+import '../../sync/data/sync_outbox_repository.dart';
+import '../../sync/domain/sync_models.dart';
 import 'item_document_codec.dart';
 import '../domain/item.dart';
 
@@ -48,11 +50,14 @@ final class _SetFieldUpdate<T> extends FieldUpdate<T> {
 /// mutation inside one SQLite transaction, so a committed change always has
 /// its durable pending-mutation state. No operation involves the network.
 class ItemRepository {
-  ItemRepository(this._db);
+  ItemRepository(this._db, {SyncOutboxRepository? outbox})
+    : _outbox = outbox ?? SyncOutboxRepository(_db);
 
   final AppDatabase _db;
+  final SyncOutboxRepository _outbox;
 
   static final Uuid _uuid = Uuid();
+  static const ItemDocumentCodec _documentCodec = ItemDocumentCodec();
 
   // --- reads ----------------------------------------------------------------
 
@@ -105,9 +110,14 @@ class ItemRepository {
       final savedContent = document == null
           ? _validatedLegacyContent(content)
           : _validatedDocument(document).plainText;
+      final itemId = id ?? _uuid.v4();
+      final attachmentRecords = await _validatedAttachmentRecords(
+        itemId: itemId,
+        attachmentIds: document?.attachmentIds ?? const {},
+      );
       final now = DateTime.now();
       final item = Item(
-        id: id ?? _uuid.v4(),
+        id: itemId,
         title: title,
         content: savedContent,
         note: note,
@@ -134,7 +144,20 @@ class ItemRepository {
               updatedAt: item.updatedAt,
             ),
           );
-      await _enqueueMutation(item.id, op: 'upsert', baseRevisionFallback: 0);
+      await _outbox.enqueue(
+        entityType: SyncEntityType.item,
+        entityId: item.id,
+        baseRevision: 0,
+        operation: SyncOperation.upsert,
+      );
+      for (final attachment in attachmentRecords) {
+        await _outbox.enqueue(
+          entityType: SyncEntityType.attachment,
+          entityId: attachment.id,
+          baseRevision: attachment.serverRevision,
+          operation: SyncOperation.upsert,
+        );
+      }
       return item;
     });
   }
@@ -153,10 +176,11 @@ class ItemRepository {
         await (_db.update(_db.items)..where((row) => row.id.equals(id))).write(
           ItemsCompanion(channelId: Value(channelId), updatedAt: Value(now)),
         );
-        await _enqueueMutation(
-          id,
-          op: 'upsert',
-          baseRevisionFallback: record.serverRevision,
+        await _outbox.enqueue(
+          entityType: SyncEntityType.item,
+          entityId: id,
+          baseRevision: record.serverRevision,
+          operation: SyncOperation.upsert,
         );
         return Item(
           id: record.id,
@@ -215,6 +239,21 @@ class ItemRepository {
         : content != null
         ? null
         : current.documentJson;
+    final oldAttachmentIds = _attachmentIds(
+      documentJson: record.documentJson,
+      legacyText: record.content,
+    );
+    final newAttachmentIds = document != null
+        ? document.attachmentIds
+        : content != null
+        ? const <String>{}
+        : oldAttachmentIds;
+    final attachmentRecords = document != null || content != null
+        ? await _validatedAttachmentRecords(
+            itemId: id,
+            attachmentIds: newAttachmentIds,
+          )
+        : const <AttachmentRecord>[];
     final now = DateTime.now();
     await (_db.update(_db.items)..where((t) => t.id.equals(id))).write(
       ItemsCompanion(
@@ -230,11 +269,21 @@ class ItemRepository {
         updatedAt: Value(now),
       ),
     );
-    await _enqueueMutation(
-      id,
-      op: 'upsert',
-      baseRevisionFallback: record.serverRevision,
+    await _outbox.enqueue(
+      entityType: SyncEntityType.item,
+      entityId: id,
+      baseRevision: record.serverRevision,
+      operation: SyncOperation.upsert,
     );
+    if (document != null || content != null) {
+      await _applyAttachmentDiff(
+        itemId: id,
+        oldIds: oldAttachmentIds,
+        newIds: newAttachmentIds,
+        activeNewRecords: attachmentRecords,
+        deletedAt: now,
+      );
+    }
     return Item(
       id: current.id,
       title: updatedTitle,
@@ -266,10 +315,11 @@ class ItemRepository {
     await (_db.update(_db.items)..where((t) => t.id.equals(id))).write(
       ItemsCompanion(isPinned: Value(isPinned), updatedAt: Value(now)),
     );
-    await _enqueueMutation(
-      id,
-      op: 'upsert',
-      baseRevisionFallback: record.serverRevision,
+    await _outbox.enqueue(
+      entityType: SyncEntityType.item,
+      entityId: id,
+      baseRevision: record.serverRevision,
+      operation: SyncOperation.upsert,
     );
     return Item(
       id: record.id,
@@ -300,10 +350,11 @@ class ItemRepository {
     await (_db.update(_db.items)..where((t) => t.id.equals(id))).write(
       ItemsCompanion(deletedAt: Value(now), updatedAt: Value(now)),
     );
-    await _enqueueMutation(
-      id,
-      op: 'delete',
-      baseRevisionFallback: record.serverRevision,
+    await _outbox.enqueue(
+      entityType: SyncEntityType.item,
+      entityId: id,
+      baseRevision: record.serverRevision,
+      operation: SyncOperation.delete,
     );
     return Item(
       id: record.id,
@@ -338,10 +389,11 @@ class ItemRepository {
         updatedAt: Value(now),
       ),
     );
-    await _enqueueMutation(
-      id,
-      op: 'upsert',
-      baseRevisionFallback: record.serverRevision,
+    await _outbox.enqueue(
+      entityType: SyncEntityType.item,
+      entityId: id,
+      baseRevision: record.serverRevision,
+      operation: SyncOperation.upsert,
     );
     return Item(
       id: record.id,
@@ -360,49 +412,84 @@ class ItemRepository {
 
   // --- internals ------------------------------------------------------------
 
-  /// Upserts the pending outbox mutation for [itemId]. Must be called inside
-  /// a transaction so the item write and its pending mutation commit (or
-  /// roll back) atomically.
-  ///
-  /// Coalescing rules: at most one outbox row per item. A new local edit
-  /// refreshes `mutationId`, `op`, `createdAt` and `retryCount`, but
-  /// preserves the existing row's `baseRevision` — the server revision the
-  /// pending change first diverged from. [baseRevisionFallback] is only used
-  /// when no pending entry exists yet.
-  Future<void> _enqueueMutation(
-    String itemId, {
-    required String op,
-    required int baseRevisionFallback,
+  /// Validates that a saved document can only claim live attachment metadata
+  /// already staged for this exact Item.
+  Future<List<AttachmentRecord>> _validatedAttachmentRecords({
+    required String itemId,
+    required Set<String> attachmentIds,
   }) async {
-    final existing = await (_db.select(
-      _db.syncOutbox,
-    )..where((t) => t.itemId.equals(itemId))).getSingleOrNull();
-    final mutationId = _uuid.v4();
-    final now = DateTime.now();
-    if (existing == null) {
-      await _db
-          .into(_db.syncOutbox)
-          .insert(
-            SyncOutboxCompanion.insert(
-              itemId: itemId,
-              mutationId: mutationId,
-              baseRevision: baseRevisionFallback,
-              op: op,
-              createdAt: now,
-            ),
-          );
-    } else {
-      await (_db.update(
-        _db.syncOutbox,
-      )..where((t) => t.itemId.equals(itemId))).write(
-        SyncOutboxCompanion(
-          mutationId: Value(mutationId),
-          op: Value(op),
-          retryCount: const Value(0),
-          createdAt: Value(now),
-        ),
+    if (attachmentIds.isEmpty) return const [];
+    final records = <AttachmentRecord>[];
+    for (final attachmentId in attachmentIds) {
+      final record = await (_db.select(
+        _db.attachments,
+      )..where((row) => row.id.equals(attachmentId))).getSingleOrNull();
+      if (record == null) {
+        throw StateError('Attachment "$attachmentId" does not exist.');
+      }
+      if (record.itemId != itemId) {
+        throw StateError('Attachment "$attachmentId" belongs to another Item.');
+      }
+      if (record.deletedAt != null) {
+        throw StateError('Attachment "$attachmentId" is deleted.');
+      }
+      records.add(record);
+    }
+    return records;
+  }
+
+  Future<void> _applyAttachmentDiff({
+    required String itemId,
+    required Set<String> oldIds,
+    required Set<String> newIds,
+    required List<AttachmentRecord> activeNewRecords,
+    required DateTime deletedAt,
+  }) async {
+    final added = newIds.difference(oldIds);
+    for (final attachment in activeNewRecords) {
+      if (!added.contains(attachment.id)) continue;
+      await _outbox.enqueue(
+        entityType: SyncEntityType.attachment,
+        entityId: attachment.id,
+        baseRevision: attachment.serverRevision,
+        operation: SyncOperation.upsert,
       );
     }
+    for (final attachmentId in oldIds.difference(newIds)) {
+      final record = await (_db.select(
+        _db.attachments,
+      )..where((row) => row.id.equals(attachmentId))).getSingleOrNull();
+      if (record == null || record.itemId != itemId) {
+        throw StateError(
+          'Stored attachment "$attachmentId" has invalid ownership.',
+        );
+      }
+      if (record.deletedAt != null) continue;
+      await (_db.update(_db.attachments)
+            ..where((row) => row.id.equals(attachmentId)))
+          .write(AttachmentsCompanion(deletedAt: Value(deletedAt)));
+      await _outbox.enqueue(
+        entityType: SyncEntityType.attachment,
+        entityId: attachmentId,
+        baseRevision: record.serverRevision,
+        operation: SyncOperation.delete,
+      );
+    }
+  }
+
+  static Set<String> _attachmentIds({
+    required String? documentJson,
+    required String legacyText,
+  }) {
+    if (documentJson == null) return const {};
+    return _documentCodec
+        .snapshot(
+          _documentCodec.decode(
+            documentJson: documentJson,
+            legacyText: legacyText,
+          ),
+        )
+        .attachmentIds;
   }
 
   Future<ItemRecord?> _recordById(String id) =>

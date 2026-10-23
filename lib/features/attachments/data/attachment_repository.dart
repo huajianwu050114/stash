@@ -5,6 +5,7 @@ import 'package:path/path.dart' as path;
 import 'package:uuid/uuid.dart';
 
 import '../../../core/database/app_database.dart';
+import '../../items/data/item_document_codec.dart';
 import '../domain/attachment.dart';
 import '../domain/attachment_type.dart';
 
@@ -19,6 +20,7 @@ class AttachmentRepository {
   final AppDatabase _db;
   final Directory _storageRoot;
   static final Uuid _uuid = Uuid();
+  static const ItemDocumentCodec _documentCodec = ItemDocumentCodec();
 
   Future<Attachment> importImage({
     required String itemId,
@@ -195,6 +197,7 @@ class AttachmentRepository {
         _db.attachments,
       )..where((row) => row.id.equals(id))).getSingleOrNull();
       if (record == null) continue;
+      if (await _isReferencedByOwner(record)) continue;
       final file = await _resolveRelativePath(record.relativePath);
       await _deleteWithRetry(file);
       await (_db.delete(
@@ -203,8 +206,11 @@ class AttachmentRepository {
     }
   }
 
-  /// Deletes attachments owned by [itemId] that are no longer referenced by
-  /// its saved document. This is intentionally shared by images and files.
+  /// Hard-deletes only active, unreferenced staged metadata and blobs.
+  ///
+  /// Committed attachments removed by an Item edit are already tombstoned by
+  /// `ItemRepository`, so they are excluded here and retained for future sync
+  /// acknowledgement, conflict handling, and storage garbage collection.
   Future<void> cleanupUnreferencedAttachments({
     required String itemId,
     required Set<String> referencedAttachmentIds,
@@ -232,6 +238,20 @@ class AttachmentRepository {
       removed++;
     }
     return removed;
+  }
+
+  Future<bool> _isReferencedByOwner(AttachmentRecord attachment) async {
+    final owner = await (_db.select(
+      _db.items,
+    )..where((row) => row.id.equals(attachment.itemId))).getSingleOrNull();
+    if (owner?.documentJson == null) return false;
+    final snapshot = _documentCodec.snapshot(
+      _documentCodec.decode(
+        documentJson: owner!.documentJson,
+        legacyText: owner.content,
+      ),
+    );
+    return snapshot.attachmentIds.contains(attachment.id);
   }
 
   Future<File> _resolveRelativePath(String relativePath) async {
