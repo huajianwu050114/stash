@@ -11,6 +11,7 @@ class DesktopAppLifecycle {
     required Future<void> Function() onOpenQuick,
     required Future<void> Function() closeDatabase,
     void Function()? disposeControllers,
+    Future<void> Function()? disposeServices,
   }) => DesktopAppLifecycle._(
     window,
     tray,
@@ -19,6 +20,7 @@ class DesktopAppLifecycle {
     onOpenQuick,
     closeDatabase,
     disposeControllers,
+    disposeServices,
   );
 
   DesktopAppLifecycle._(
@@ -29,6 +31,7 @@ class DesktopAppLifecycle {
     this._onOpenQuick,
     this._closeDatabase,
     this._disposeControllers,
+    this._disposeServices,
   );
 
   final DesktopWindowService _window;
@@ -38,6 +41,7 @@ class DesktopAppLifecycle {
   final Future<void> Function() _onOpenQuick;
   final Future<void> Function() _closeDatabase;
   final void Function()? _disposeControllers;
+  final Future<void> Function()? _disposeServices;
 
   bool _exiting = false;
 
@@ -56,6 +60,7 @@ class DesktopAppLifecycle {
     await _window.setCloseHandler(null);
     await _hotkeys.shutdown();
     _disposeControllers?.call();
+    await _disposeServices?.call();
     await _tray.dispose();
     await _closeDatabase();
     await _window.destroy();

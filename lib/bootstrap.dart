@@ -17,6 +17,7 @@ import 'features/backup/data/pre_migration_backup.dart';
 import 'features/backup/data/startup_restore_applier.dart';
 import 'features/backup/domain/backup_exception.dart';
 import 'features/quick_stash/application/quick_stash_controller.dart';
+import 'features/sync/application/lan_dev_sync_runtime.dart';
 import 'platform/desktop_window/desktop_window_service.dart';
 import 'platform/backup/backup_platform.dart';
 import 'platform/desktop_window/window_manager_desktop_window_service.dart';
@@ -95,6 +96,13 @@ Future<void> bootstrap(AppProfile profile) async {
       (await StartupRestoreNotice.consume(storage))?.message ??
       startupRestoreError;
   final quickStash = QuickStashController(window);
+  final lanSync = Platform.isWindows
+      ? await LanDevSyncRuntime.startIfConfigured(
+          profile: profile,
+          database: database,
+          storage: storage,
+        )
+      : null;
   if (Platform.isWindows) {
     final lifecycle = DesktopAppLifecycle(
       window: window,
@@ -107,6 +115,7 @@ Future<void> bootstrap(AppProfile profile) async {
       onOpenQuick: quickStash.showQuick,
       closeDatabase: database.close,
       disposeControllers: quickStash.dispose,
+      disposeServices: lanSync?.dispose,
     );
     await lifecycle.initialize();
   }
