@@ -135,6 +135,8 @@ class SyncCycleResult {
 
 enum SyncRemoteFailureKind {
   offline,
+  relayUnavailable,
+  networkFailure,
   timeout,
   unauthorized,
   serverError,
