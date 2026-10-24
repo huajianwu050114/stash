@@ -17,6 +17,7 @@ void main() {
       onOpenFull: window.showFull,
       onOpenQuick: window.showQuick,
       closeDatabase: () async => log.add('database.close'),
+      disposeServices: () async => log.add('sync.dispose'),
     );
 
     await lifecycle.initialize();
@@ -32,6 +33,7 @@ void main() {
       'window.hide',
     ]);
     expect(log, isNot(contains('window.destroy')));
+    expect(log, isNot(contains('sync.dispose')));
   });
 
   test('explicit Exit releases resources in order and only once', () async {
@@ -46,6 +48,7 @@ void main() {
       onOpenQuick: window.showQuick,
       closeDatabase: () async => log.add('database.close'),
       disposeControllers: () => log.add('controllers.dispose'),
+      disposeServices: () async => log.add('sync.dispose'),
     );
     await lifecycle.initialize();
     log.clear();
@@ -57,6 +60,7 @@ void main() {
       'window.closeHandler.clear',
       'hotkeys.shutdown',
       'controllers.dispose',
+      'sync.dispose',
       'tray.dispose',
       'database.close',
       'window.destroy',

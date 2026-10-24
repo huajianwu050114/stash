@@ -34,6 +34,11 @@ void main() {
 
     test('empty Dev profile produces a valid standalone archive', () async {
       final stableMarker = await fixture.createStableMarker();
+      await fixture.storage.lanIdentityDirectory.create(recursive: true);
+      await File(
+        path.join(fixture.storage.lanIdentityDirectory.path, 'pairing-secret'),
+      ).writeAsString('test-only-secret-that-must-not-enter-backup');
+      await fixture.storage.lanRelayDatabaseFile.writeAsBytes([1, 2, 3]);
       final output = File(path.join(fixture.support.path, 'empty.stashbackup'));
 
       final summary = await fixture.backupService.createBackup(
@@ -59,6 +64,10 @@ void main() {
       expect(await stableMarker.readAsString(), 'stable-untouched');
       expect(
         await File(path.join(extraction.path, 'marker.txt')).exists(),
+        isFalse,
+      );
+      expect(
+        await Directory(path.join(extraction.path, 'sync')).exists(),
         isFalse,
       );
       final snapshot = sqlite3.open(
