@@ -34,6 +34,17 @@ class AppStoragePaths {
   Directory get attachmentsDirectory =>
       Directory(path.join(root.path, 'attachments'));
 
+  /// Device-local LAN sync authority and identity state. Backups deliberately
+  /// select only the working database and managed attachments, so this
+  /// operational directory is never included in a normal Stash backup.
+  Directory get lanSyncDirectory => Directory(path.join(root.path, 'sync'));
+  File get lanRelayDatabaseFile =>
+      File(path.join(lanSyncDirectory.path, 'lan-relay.sqlite'));
+  Directory get lanRelayBlobDirectory =>
+      Directory(path.join(lanSyncDirectory.path, 'lan-relay-blobs'));
+  Directory get lanIdentityDirectory =>
+      Directory(path.join(lanSyncDirectory.path, 'identity'));
+
   /// Profile-aware maintenance data lives beside, never inside, the active
   /// profile root so a pending restore can replace that root safely.
   Directory get maintenanceDirectory =>
