@@ -229,12 +229,13 @@ void main() {
 
     test('lost push response retries idempotently over the network', () async {
       final lan = remote();
-      final request = SyncPushRequest(
+      final now = DateTime.utc(2026);
+      final owner = SyncPushRequest(
         entity: const SyncEntityKey(
           type: SyncEntityType.item,
           id: 'retry-item',
         ),
-        mutationId: 'retry-mutation',
+        mutationId: 'retry-owner-mutation',
         baseRevision: 0,
         operation: SyncOperation.upsert,
         payload: ItemSyncPayload(
@@ -246,8 +247,39 @@ void main() {
           documentJson: null,
           tags: const [],
           isPinned: false,
-          createdAt: DateTime.utc(2026),
-          updatedAt: DateTime.utc(2026),
+          createdAt: now,
+          updatedAt: now,
+          deletedAt: null,
+          serverRevision: 0,
+        ).toJson(),
+      );
+      expect((await lan.push(owner)).wasAccepted, isTrue);
+      final bytes = Uint8List.fromList([1, 2, 3, 4, 5]);
+      final checksum = sha256.convert(bytes).toString();
+      for (var retry = 0; retry < 2; retry++) {
+        await lan.putBlob(
+          attachmentId: 'retry-attachment',
+          byteSize: bytes.length,
+          sha256: checksum,
+          bytes: Stream.value(bytes),
+        );
+      }
+      final request = SyncPushRequest(
+        entity: const SyncEntityKey(
+          type: SyncEntityType.attachment,
+          id: 'retry-attachment',
+        ),
+        mutationId: 'retry-attachment-mutation',
+        baseRevision: 0,
+        operation: SyncOperation.upsert,
+        payload: AttachmentSyncPayload(
+          id: 'retry-attachment',
+          itemId: 'retry-item',
+          mimeType: 'application/pdf',
+          originalFileName: 'retry.pdf',
+          byteSize: bytes.length,
+          sha256: checksum,
+          createdAt: now,
           deletedAt: null,
           serverRevision: 0,
         ).toJson(),
@@ -257,7 +289,12 @@ void main() {
       final retried = await lan.push(request);
       expect(retried.outcome, SyncApplyOutcome.alreadyApplied);
       expect(retried.remoteRevision, 1);
-      expect(store.changeCount, 1);
+      expect(store.changeCount, 2);
+      final committedBlobFiles = await relayBlobs
+          .list(recursive: true)
+          .where((entry) => entry is File)
+          .toList();
+      expect(committedBlobFiles, hasLength(1));
     });
   });
 
