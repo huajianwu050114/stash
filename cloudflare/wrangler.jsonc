@@ -5,14 +5,14 @@
   "compatibility_date": "2026-10-01",
   "workers_dev": true,
   "vars": {
-    "R2_ACCOUNT_ID": "REPLACE_WITH_DEV_ACCOUNT_ID",
+    "R2_ACCOUNT_ID": "59d55c9a0b2b013c46ca4f89005af96f",
     "R2_BUCKET_NAME": "stash-sync-dev-blobs",
   },
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "stash-sync-dev",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "6034957e-f236-4fd8-82ee-68d2725a4589",
       "migrations_dir": "migrations",
     },
   ],
